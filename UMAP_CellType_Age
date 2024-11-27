@@ -1,0 +1,134 @@
+rm(list=ls())
+library(dplyr)
+library(patchwork)
+library(harmony)
+library(ggsci)
+library(Rcpp)
+library(SeuratObject)
+library(sp)
+library(harmony)
+library(remotes)
+library(devtools)
+library(Seurat)
+library(viridisLite)
+library(paletteer)
+library(ggplot2)
+library(viridis)
+library(ggnewscale)
+library(RColorBrewer)
+library(cowplot)
+library(grid)
+
+
+out_dir <- "output path"
+srt <- get(load(file="data path...HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
+
+srt <- NormalizeData(object = srt)
+srt <- FindVariableFeatures(srt, selection.method = "vst", nfeatures = 3000)
+srt <- ScaleData(srt)
+srt <- RunPCA(srt, features = VariableFeatures(object = srt))
+srt <- RunUMAP(srt, reduction = "pca", dim=1:15)
+
+srt <- RunHarmony(srt, c("dataset","sample","X3._or_5." ))
+
+srt <- RunUMAP(srt, reduction = "harmony", dim=1:15)
+save ="output path...Ke_HLCA_notNormalized_harmonized_dataset_sample_over1K.Rda"
+
+
+figures.dir = "figures path" 
+metaGroupNames_list = c("cpdb_lvl_2.5_uniform_v3")
+#Cell_type_umap
+for(i in 1:length(metaGroupNames_list))
+{
+  metaGroupNames<-metaGroupNames_list[[i]]
+  print(metaGroupNames)
+  png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels_over1K_harmonized_dataset_sample_x3or5.png'), width=2100*1.2, height=1400*1.2,res=300)
+umap=DimPlot(srt, reduction = "umap",group.by = metaGroupNames,pt.size = .005,label.size=3.5/3,label=FALSE,repel=FALSE, raster = FALSE) + 
+ guides(color = guide_legend(override.aes = list(size=12/12), ncol=1)) +
+ theme(axis.ticks=element_blank(),
+  plot.margin=grid::unit(c(-0/1,0/1,0/1,0/1), "mm"),
+  legend.box.margin = margin(t=0,r=0,b=0,l=-15),
+  legend.key.size = unit(0.2, 'mm'),
+  legend.key.height = unit(0.3, 'mm'),
+  legend.text = element_text(size=6/2,hjust=-0.,margin=margin(t=-0,r=-0,b=-0,l=-6,unit='pt')),
+  plot.title = element_text(size=5,hjust = -0.,vjust=0.01,face="bold",margin = margin(t=0,r=0,b=0.1,l=0)),
+  axis.text.x=element_text(size=2.5,angle = 0, vjust = 1, hjust=0,margin=margin(t=0.5,r=0,b=0,l=0,unit='pt')),
+  axis.text.y=element_text(size=2.5,angle = 0,hjust = 1.5, vjust=0,margin=margin(t=0,r=0.5/1,b=0,l=0,unit='pt')), 
+  axis.title.y=element_text(size=3,vjust = -4,margin=margin(t=0,r=0,b=-0,l=0,unit='pt')),
+  axis.title.x=element_text(size=3,margin=margin(t=0,r=-0,b=0,l=0,unit='pt')) 
+  )+
+    scale_color_manual(values = paletteer_d("ggsci::default_igv"))+
+    guides(color = guide_legend(override.aes = list(size=1), ncol=2)) 
+plot(umap)
+dev.off()
+}
+
+#Age_umap
+
+metaGroupNames_list = c("Age")
+for(i in 1:length(metaGroupNames_list))
+{
+  values=c(0,0.7,1)
+  limits=c(20, 80)
+  metaGroupNames<-metaGroupNames_list[[i]]
+  print(metaGroupNames)
+  png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_dataset_sample_X3._or_5._new_dimplot_wLabels_v2_continuos_core_extension.png'), width=500*1.2, height=400*1.2,res=300)
+
+
+  continuous_palette <- rev(brewer.pal(n = 11, name = "RdBu"))
+  feature_plot <- FeaturePlot(
+    object = srt, 
+    features = metaGroupNames,  
+    reduction = "umap",  
+    pt.size = 0.01,  
+    order = TRUE,
+    raster = FALSE
+ 
+) + 
+  scale_color_gradientn(
+    colors = continuous_palette,
+    values = values,  
+    limits = limits,
+    oob = scales::squish  
+  ) +
+  theme(
+    axis.ticks = element_blank(),
+    plot.margin = grid::unit(c(-0/1, 0/1, 0/1, 0/1), "mm"),
+    legend.box.margin = margin(t = 0, r = 0, b = 0, l = -15),
+    legend.key.size = unit(0.2, 'mm'),
+    legend.key.height = unit(0.3, 'mm'),
+    legend.text = element_text(size = 6/2, hjust = -0., margin = margin(t = -0, r = -0, b = -0, l = -6, unit = 'pt')),
+    plot.title = element_text(size = 5, hjust = -0., vjust = 0.01, face = "bold", margin = margin(t = 0, r = 0, b = 0.1, l = 0)),
+    axis.text.x = element_text(size = 2.5, angle = 0, vjust = 1, hjust = 0, margin = margin(t = 0.5, r = 0, b = 0, l = 0, unit = 'pt')),
+    axis.text.y = element_text(size = 2.5, angle = 0, hjust = 1.5, vjust = 0, margin = margin(t = 0, r = 0.5/1, b = 0, l = 0, unit = 'pt')),
+    axis.title.y = element_text(size = 3, vjust = -4, margin = margin(t = 0, r = 0, b = -0, l = 0, unit = 'pt')),
+    axis.title.x = element_text(size = 3, margin = margin(t = 0, r = -0, b = 0, l = 0, unit = 'pt'))
+  )+ theme_void()+theme(legend.position="none")+ggtitle(NULL)
+
+
+print(feature_plot)
+dev.off()
+pdf(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels.pdf'), width=4, height=4)
+png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels.png'), width=1000*1.2, height=800*1.2,res=300)
+umap2 <- FeaturePlot(
+  object = srt, 
+  features = metaGroupNames,  
+  reduction = "umap",  
+  pt.size = 0.01,  
+  order = TRUE,
+  raster = FALSE
+) + 
+  scale_color_gradientn(
+    colors = continuous_palette,
+    values = values,
+    limits = limits, 
+    oob = scales::squish 
+  )
+
+ legends <- cowplot::get_legend(umap2[[1]])
+ 
+plot(legends)
+
+dev.off()
+
+}
