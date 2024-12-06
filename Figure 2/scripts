@@ -1,1 +1,966 @@
+rm(list=ls())
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(harmony)
+library(ggsci)
+library(viridisLite)
+library(ggplot2)
+library(paletteer)
+library(Rcpp)
+library(SeuratObject)
+library(sp)
+library(RColorBrewer)
+library(terra)
+library(monocle3)
+library(SummarizedExperiment)
+library(Matrix)
+library(ggpubr)
+library(hash)
+library(tidyverse)
+library(data.table)
+library(rlist)
+library(DESeq2)
+library(preprocessCore)
+library(sva)
+library(scales)
+library(tidyr)
+library(rstatix)
+library(gamlss)
+library(gamlss.dist)
+library(gamlss.add)
+library(ivmte)
+library(fitdistrplus)
+library(logspline)
+library(fgsea)
 
+
+#Figure_2A
+
+
+srt=readRDS(file="data path/hlca_full_pats_enrich_celltypes_No_Multiciliated_harmonized.rds")
+figures.dir ="output path" 
+
+
+srt$cpdb_lvl_2.5_uniform=0
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasmacytoid DCs"] <- 'pDCs'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'Tcells'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle FAM83D+"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SM activated stress response"] <- 'SmoothMuscle'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (non-nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (bronchial)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (subsegmental)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "pre-TB secretory"] <- 'Secretory'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG duct"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG mucous"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (bronchial)"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (nasal)"] <- 'SMG'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Ionocyte"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Neuroendocrine"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Tuft"] <- 'Rare'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasma cells"] <- 'Plasma'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "NK cells"] <- 'NK'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Deuterosomal"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (nasal)"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (non-nasal)"] <- 'Multiciliated'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'Monocytes'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'Monocytes'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mesothelium"] <- 'Mesothelium'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mast cells"] <- 'Mast'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'Macrophages'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC differentiating"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC mature"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC proliferating"] <- 'LymphaticEC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hematopoietic stem cells"] <- 'HSC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'Fibroblasts'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC1"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC2"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Migratory DCs"] <- 'DC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous pulmonary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'Bloodvessels'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Basal'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "B cells"] <- 'B'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT1"] <- 'AT1'
+ 
+table(srt$cpdb_lvl_2.5_uniform)
+ 
+srt$cpdb_lvl1.5_uniform=0
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "AT1"] <- 'AlveolarEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "AT2"] <- 'AlveolarEpithelial'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Rare"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Secretory"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'AlveolarEpithelial'
+
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "SMG"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Basal"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Multiciliated"] <- 'AirwayEpithelial'
+ 
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "B"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Mast"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Plasma"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "pDCs"] <- 'BPlasmaMast'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Macrophages"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "DC"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Monocytes"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "HSC"] <- 'Myeloid'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "LymphaticEC"] <- 'LymphaticEC'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Bloodvessels"] <- 'Bloodvessels'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Mesothelium"] <- 'Mesothelium'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "SmoothMuscle"] <- 'SmoothMuscle'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Fibroblasts"] <- 'Fibroblasts'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Tcells"] <- 'TNK'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "NK"] <- 'TNK'
+
+srt$cpdb_lvl_3.5_uniform=srt$cpdb_lvl_2.5_uniform
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'CD4T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'CD8T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'TProlif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'ClassicMono'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'NonclassicMono'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'IM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'MoAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'TRAMProlif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2Prolif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'ECArtery'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'AdventitialFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'AlveolarFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'MyoFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'PeriFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Pericytes'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'SubpleuralFB'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v2=srt$cpdb_lvl_2.5_uniform
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'AT2'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD4T"] <- 'CD4T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD4T"] <- 'CD4T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "TProlif"] <- 'CD8T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD8T"] <- 'CD8T'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Club (nasal)"] <- 'Club'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Club (non-nasal)"] <- 'Club'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (bronchial)"] <- 'Goblet'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (nasal)"] <- 'Goblet'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (subsegmental)"] <- 'Goblet'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Ionocyte"] <- 'Ionocyte'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Neuroendocrine"] <- 'PNEC'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Tuft"] <- 'Tuft'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Pericytes'
+ 
+ 
+table(srt$cpdb_lvl_2.5_uniform_v2)
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels.png'), width=1200*1.2, height=800*1.2,res=300)
+metaGroupNames <- "cpdb_lvl_2.5_uniform_v3"
+umap <- DimPlot(srt, reduction = "umap", group.by = metaGroupNames, pt.size = .005, label.size = 3.5/3, label = TRUE, repel = FALSE) + 
+  guides(color = guide_legend(override.aes = list(size = 12/12), ncol = 1)) +
+  theme(axis.ticks = element_blank(),
+        plot.margin = grid::unit(c(-0/1, 0/1, 0/1, 0/1), "mm"),
+        legend.box.margin = margin(t = 0, r = 0, b = 0, l = -15),
+        legend.key.size = unit(0.2, 'mm'),
+        legend.key.height = unit(0.3, 'mm'),
+        legend.text = element_text(size = 6/2, hjust = -0., margin = margin(t = -0, r = -0, b = -0, l = -6, unit = 'pt')),
+        plot.title = element_text(size = 5, hjust = -0., vjust = 0.01, face = "bold", margin = margin(t = 0, r = 0, b = 0.1, l = 0)),
+        axis.text.x = element_text(size = 2.5, angle = 0, vjust = 1, hjust = 0, margin = margin(t = 0.5, r = 0, b = 0, l = 0, unit = 'pt')),
+        axis.text.y = element_text(size = 2.5, angle = 0, hjust = 1.5, vjust = 0, margin = margin(t = 0, r = 0.5/1, b = 0, l = 0, unit = 'pt')),
+        axis.title.y = element_text(size = 3, vjust = -4, margin = margin(t = 0, r = 0, b = -0, l = 0, unit = 'pt')),
+        axis.title.x = element_text(size = 3, margin = margin(t = 0, r = -0, b = 0, l = 0, unit = 'pt')))+
+  scale_color_manual(values = paletteer_d("ggsci::default_igv")) 
+plot(umap)
+dev.off()
+
+#Figure_2B
+
+gene_list=c('ANXA2','KRT19','KRT8','KRT7','CTSE','PRSS23','IL32','S100A10','ACTG1','KRT18','HSPB1','TAGLN2','CD151','PKM','TAGLN','TACSTD2','TUBA1A','LGALS1','CRIP2','CAPG','PLP2','TPM4','PFN1','CD24','YWHAH')
+gene_list=list(gene_list)
+names(gene_list)= "CN14"
+metaGroupNames = "CN14"
+srt <- AddModuleScore( object = srt, features = gene_list, name = "CN14")
+values=c(0, 0.8, 1)
+limits =c(0,2)
+png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels_v2_continuos.png'), width=3000*1.2, height=2400*1.2,res=800)
+  feature_plot <- FeaturePlot(
+  object = srt, 
+  features = "CN141",  
+  reduction = "umap",
+  
+  pt.size = 0.01,  
+  order = TRUE,
+  raster = FALSE
+  )+
+  scale_color_gradientn(
+    colors = continuous_palette, 
+    values = values,
+    limits = limits,
+    oob = scales::squish  
+    )
+ print(feature_plot)
+dev.off()
+
+#Figure_2D
+
+srt$cpdb_lvl_2.5_uniform=0
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasmacytoid DCs"] <- 'pDCs'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'Tcells'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle FAM83D+"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SM activated stress response"] <- 'SmoothMuscle'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (non-nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (bronchial)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (subsegmental)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "pre-TB secretory"] <- 'Secretory'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG duct"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG mucous"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (bronchial)"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (nasal)"] <- 'SMG'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Ionocyte"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Neuroendocrine"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Tuft"] <- 'Rare'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasma cells"] <- 'Plasma'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "NK cells"] <- 'NK'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Deuterosomal"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (nasal)"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (non-nasal)"] <- 'Multiciliated'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'Monocytes'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'Monocytes'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mesothelium"] <- 'Mesothelium'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mast cells"] <- 'Mast'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'Macrophages'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC differentiating"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC mature"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC proliferating"] <- 'LymphaticEC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hematopoietic stem cells"] <- 'HSC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'Fibroblasts'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC1"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC2"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Migratory DCs"] <- 'DC'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous pulmonary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'Bloodvessels'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Basal'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "B cells"] <- 'B'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2'
+ 
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT1"] <- 'AT1'
+ 
+table(srt$cpdb_lvl_2.5_uniform)
+ 
+srt$cpdb_lvl1.5_uniform=0
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "AT1"] <- 'AlveolarEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "AT2"] <- 'AlveolarEpithelial'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Rare"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Secretory"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'AlveolarEpithelial'
+
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "SMG"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Basal"] <- 'AirwayEpithelial'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Multiciliated"] <- 'AirwayEpithelial'
+ 
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "B"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Mast"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Plasma"] <- 'BPlasmaMast'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "pDCs"] <- 'BPlasmaMast'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Macrophages"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "DC"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Monocytes"] <- 'Myeloid'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "HSC"] <- 'Myeloid'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "LymphaticEC"] <- 'LymphaticEC'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Bloodvessels"] <- 'Bloodvessels'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Mesothelium"] <- 'Mesothelium'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "SmoothMuscle"] <- 'SmoothMuscle'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Fibroblasts"] <- 'Fibroblasts'
+ 
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "Tcells"] <- 'TNK'
+srt$cpdb_lvl1.5_uniform[srt$cpdb_lvl_2.5_uniform == "NK"] <- 'TNK'
+srt$cpdb_lvl_3.5_uniform=srt$cpdb_lvl_2.5_uniform
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'CD4T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'CD8T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'TProlif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'ClassicMono'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'NonclassicMono'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'IM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'MoAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'TRAMProlif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2Prolif'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'ECArtery'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+ 
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'AdventitialFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'AlveolarFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'MyoFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'PeriFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Pericytes'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'SubpleuralFB'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v2=srt$cpdb_lvl_2.5_uniform
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'AT2'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD4T"] <- 'CD4T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD4T"] <- 'CD4T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "TProlif"] <- 'CD8T'
+srt$cpdb_lvl_2.5_uniform_v2[srt$cpdb_lvl_3.5_uniform == "CD8T"] <- 'CD8T'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Club (nasal)"] <- 'Club'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Club (non-nasal)"] <- 'Club'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (bronchial)"] <- 'Goblet'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (nasal)"] <- 'Goblet'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Goblet (subsegmental)"] <- 'Goblet'
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Ionocyte"] <- 'Ionocyte'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Neuroendocrine"] <- 'PNEC'
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Tuft"] <- 'Tuft'
+ 
+srt$cpdb_lvl_2.5_uniform_v2[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Pericytes'
+ 
+ 
+table(srt$cpdb_lvl_2.5_uniform_v2)
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+
+hlca=srt
+hlca$age_trio <- 'unknown'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=0.0, to=39.5, by=0.5))] <- 'young'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=40.0, to=59.5, by=0.5))] <- 'intermediate'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=60.0, to=150.0, by=0.5))] <- 'old'
+table(hlca$age_trio)
+
+h=hash()
+h[["cnmf_CN14_17_Epi_woMC_Alveolar_Subset_cpdb_lvl_2.5_downsampled"]]=list(c("ANXA2", "KRT19", "KRT8", "KRT7", "CTSE", "PRSS23", "IL32", "S100A10", "ACTG1", "KRT18", "HSPB1", "TAGLN2", "CD151", "PKM", "TAGLN", "TACSTD2", "TUBA1A", "LGALS1", "CRIP2", "CAPG", "PLP2", "TPM4", "PFN1", "CD24", "YWHAH"))
+
+
+output_path <-"/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/"
+
+hlca.celltype=unique(hlca$orig.ident)
+
+number=length(h)
+
+tag = "Em14"
+
+for (j in 1:length(hlca.celltype)){
+     #hlca1 <- subset(x = hlca, subset = age_trio %in% c('young', 'intermediate', 'old')
+    # hlca1 <- subset(x = hlca, subset = age_trio %in% c('young', 'intermediate', 'old') & ann_level_1 == hlca.celltype[j]); tag <- paste0("HLCA_marker_ann_level_1_selected_KX_.",hlca.celltype[j])
+      hlca1 <- subset(x = hlca, subset = age_trio %in% c('young', 'intermediate', 'old') & orig.ident == hlca.celltype[j]); tag <- paste0("HLCA_marker_orig.ident_selected_KX_.",hlca.celltype[j])
+    # hlca1 <- subset(x = hlca, subset = age_trio %in% c('young', 'intermediate', 'old') & predicted.id == hlca.celltype[j]); tag <- paste0("HLCA_marker_predicted.id_selected_KX_.",hlca.celltype[j])
+    obj <- hlca1; split<-"sample"
+    plots <- list()
+    x <- 0
+    for (i in hash::keys(h)){
+        print(i)
+        name = i
+        flag <- TRUE
+        tryCatch(srt <- AddModuleScore(obj, features = h[[i]], name = name), error = function(e) flag <<-FALSE)
+        if (!flag) {print(paste0("Skipping ", name))}
+        if (!flag) next
+        obj.list <- SplitObject(srt, split.by = split)
+        x <- x + 1
+        module_scores_list <- list()
+        Age_status_list <- list()
+        # this is median
+        for (i in 1:length(obj.list)) {
+            obj2 <- obj.list[[i]]
+            median_module_score <- median(obj2@meta.data[,paste0(name, "1")])
+            Age <- obj2@meta.data[,'age_trio']
+            module_scores_list[i] <- median_module_score
+            Age_status_list[i] <- Age
+        }    
+        module_scores_vec <- as.vector(module_scores_list)
+        Age_status_vec <- as.vector(Age_status_list)
+        names(module_scores_vec) <- names(obj.list)
+        names(Age_status_vec) <- names(obj.list)
+        module_scores_df <- as.data.frame(module_scores_vec) # patients (rows) vs module score (cols)
+        Age_status_df <- as.data.frame(Age_status_vec)
+        merged_df <- rbind(module_scores_df, Age_status_df)
+        merged_df <- t(merged_df)
+        colnames(merged_df) <- c(name, "Age")
+        module_scores_mtx <- as.matrix(merged_df)
+        module_scores_mtx <- as.data.frame(module_scores_mtx)
+
+        if (split == 'SSample'){
+            levels <- c('young', 'old')
+            palette <- c("#0091CA", "#D8423D")
+        } else {
+            levels <- c('young', 'intermediate', 'old')
+            palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+        }
+
+        # levels <- c('young', 'intermediate', 'old')
+        # palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+
+        module_scores_mtx$Age <- factor(module_scores_mtx$Age, levels=levels)
+        module_scores_mtx <- module_scores_mtx[order(module_scores_mtx$Age),]
+
+        module_scores_mtx[, name] <- as.numeric(module_scores_mtx[, name])
+
+
+        my_comparisons <- combn(levels, 2, simplify = FALSE)
+
+        if (split == 'SSample'){
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        } else {
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (7.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        }
+
+        plots[[x]] <- plot
+
+    }
+
+    # You will need to change the height value here if you have more than 5 module score analyses you want to do per atlas
+    while (!is.null(dev.list())) dev.off()
+    pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_median_wFDR.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+    # pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_sum.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+    # pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_mean.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+    print(cowplot::plot_grid(plotlist = plots, ncol = 5*1/5*number, nrow= 6*1/6*1))
+    dev.off()
+
+        obj <- hlca1; split<-"sample"
+    plots <- list()
+    x <- 0
+    for (i in hash::keys(h)){
+        print(i)
+        name = i
+        flag <- TRUE
+        tryCatch(srt <- AddModuleScore(obj, features = h[[i]], name = name), error = function(e) flag <<-FALSE)
+        if (!flag) {print(paste0("Skipping ", name))}
+        if (!flag) next
+        obj.list <- SplitObject(srt, split.by = split)
+        x <- x + 1
+        module_scores_list <- list()
+        Age_status_list <- list()
+        # this is mean
+        for (i in 1:length(obj.list)) {
+            obj2 <- obj.list[[i]]
+            median_module_score <- mean(obj2@meta.data[,paste0(name, "1")])
+            Age <- obj2@meta.data[,'age_trio']
+            module_scores_list[i] <- median_module_score
+            Age_status_list[i] <- Age
+        }        
+        module_scores_vec <- as.vector(module_scores_list)
+        Age_status_vec <- as.vector(Age_status_list)
+        names(module_scores_vec) <- names(obj.list)
+        names(Age_status_vec) <- names(obj.list)
+        module_scores_df <- as.data.frame(module_scores_vec) # patients (rows) vs module score (cols)
+        Age_status_df <- as.data.frame(Age_status_vec)
+        merged_df <- rbind(module_scores_df, Age_status_df)
+        merged_df <- t(merged_df)
+        colnames(merged_df) <- c(name, "Age")
+        module_scores_mtx <- as.matrix(merged_df)
+        module_scores_mtx <- as.data.frame(module_scores_mtx)
+
+        if (split == 'SSample'){
+            levels <- c('young', 'old')
+            palette <- c("#0091CA", "#D8423D")
+        } else {
+            levels <- c('young', 'intermediate', 'old')
+            palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+        }
+
+        module_scores_mtx$Age <- factor(module_scores_mtx$Age, levels=levels)
+        module_scores_mtx <- module_scores_mtx[order(module_scores_mtx$Age),]
+
+        module_scores_mtx[, name] <- as.numeric(module_scores_mtx[, name])
+
+
+        my_comparisons <- combn(levels, 2, simplify = FALSE)
+
+        if (split == 'SSample'){
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        } else {
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (7.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        }
+
+        plots[[x]] <- plot
+
+    }
+
+    
+    while (!is.null(dev.list())) dev.off()
+    pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_mean_wFDR.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+    print(cowplot::plot_grid(plotlist = plots, ncol = 5*1/5*number, nrow= 6*1/6*1))
+    dev.off()
+
+}
+
+#Figure_2F
+
+df1 <- get(load(file = "data path/lig_rec_differential_HLCA_old_young_1k.Rda"))
+
+df1$old_num_signif=as.numeric(df1$old_num_signif)
+df1$young_num_signif=as.numeric(df1$young_num_signif)
+df1$old_young_prop_diff=as.numeric(df1$old_young_prop_diff)
+df1$old_young_neglogpval_fishertest=as.numeric(df1$old_young_neglogpval_fishertest)
+df1$signif <- 0
+df1$signif[df1$old_young_neglogpval_fishertest >= 1.3] <- 1
+df1$signif <- factor(df1$signif, levels = c(0,1))
+
+str(df1)
+range <- max(abs(df1$old_young_prop_diff))
+
+colors <- c(brewer_pal(palette = "Spectral", direction = -1)(7))
+pal <- gradient_n_pal(colors)
+custom_color_scale <- scale_fill_gradientn(
+  colours = pal(c(0, rescale(seq_along(df1$old_young_prop_diff)), 1)), 
+  # limits = c(0, 6), breaks = 0:6,
+  values = c(0,rescale(seq_along(df1$old_young_prop_diff)),1), 
+  limits = c(-range,range),
+  name="Prop_Diff_Scale"
+)
+
+ints=df1$int_name[df1$old_young_neglogpval_fishertest >= 1.3] 
+
+df2 <- df1[df1$int_name %in% ints,] 
+
+row.names(df1)
+
+df1$int_name_CellPairUnique <- row.names(df1)
+colnames(df1)
+df1$int_name_CellPairUnique
+
+ints_cellpair_interaction=df1$int_name_CellPairUnique[df1$old_young_neglogpval_fishertest >= 1.3] 
+
+df3 <- df1[df1$int_name_CellPairUnique %in% ints_cellpair_interaction,]
+dim(df3)
+head(df3)
+
+Chemokine=c("WNT7","WNT5")
+
+Chemokine_name=paste(Chemokine,collapse="_")
+
+Compartment=c("AT2","Basal.resting")
+
+Compartment_name <- paste(Compartment, collapse="_")
+
+filtered_df <- df3[sapply(df3$interacting_pair, function(pair) any(sapply(Chemokine, function(chemo) grepl(chemo, pair)))), ]
+
+
+df1$int_name_CellPairUnique <- row.names(df1)
+colnames(df1)
+df1$int_name_CellPairUnique
+ints_cellpair_interaction=df1$int_name_CellPairUnique[df1$old_young_neglogpval_fishertest >= 1.0] 
+
+df4 <- df1[df1$int_name_CellPairUnique %in% ints_cellpair_interaction,]
+dim(df4)
+head(df4)
+filtered_df_v3 <- df4[df4$gene_a %in% Chemokine | df4$gene_b %in% Chemokine, ]
+
+filtered_df_v3 <- df4[sapply(df4$interacting_pair, function(pair) any(sapply(Chemokine, function(chemo) grepl(chemo, pair)))), ]
+
+filtered_df_v3 <- filtered_df_v3[sapply(filtered_df_v3$cell.pair, function(pair) any(sapply(Compartment, function(chemo) grepl(chemo, pair)))), ]
+ 
+#filtered_df_v3 <- filtered_df_v3[sapply(filtered_df_v3$cell.pair, isDesiredPair), ]
+
+#filtered_df_v3
+
+filtered_df_v3 <- filtered_df_v3 %>%
+  arrange(desc(grepl("AT2", cell.pair)))
+
+dim(filtered_df_v3)
+
+print(filtered_df_v3$cell.pair)
+
+filtered_df_v3$cell.pair <- factor(filtered_df_v3$cell.pair, levels = unique(filtered_df_v3$cell.pair))
+                                                                             
+filtered_df_v3
+
+pdf(file = paste0(figures.dir, "dotplot_lig_rec_differential_hlca_old_young_1k_v2_",Chemokine_name,"_signal",Compartment_name,"_filtered_paper_version_over1.0.pdf"), useDingbats = F, 
+  height = min(5,log((length(unique(filtered_df_v3$cell.pair))))), 
+  width = min(5, log((length(unique(filtered_df_v3$interacting_pair))))))
+p<-ggplot(data = filtered_df_v3, mapping = aes(x=cell.pair, y=interacting_pair, color=old_young_prop_diff, size=old_young_neglogpval_fishertest))+geom_point(shape = 21, aes(colour = as.factor(signif), fill = old_young_prop_diff))+
+  scale_colour_manual(values=c("00FFFFFF","black")) +labs(size="NegLogPval", colour="is_Prop_Diff") +
+  theme_minimal() +
+  scale_size(range = c(0.25, 3.5))+
+  custom_color_scale +
+  theme(text = element_text(size=6), strip.text = element_text(size=6,face='bold'))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+    axis.text.y = element_text (angle = 0, vjust = 0.5, hjust=1,margin=margin(t=0,r=2,b=0,l=-4,unit='pt')),
+    plot.margin=grid::unit(c(2/1,2/1,2/1,3/1), "mm"),
+    legend.key.size = unit(6, 'pt'),
+    legend.key.width = unit(6, 'pt'),
+    legend.title=element_text(size=6),
+            
+    legend.box.margin = margin(t=0,r=0,b=-0,l=-10),
+    legend.text = element_text(size=6,hjust=-0.,margin=margin(t=-0,r=-0,b=-0,l=-0,unit='pt')),
+    axis.title.y=element_text(size=6,vjust = 3,margin=margin(t=0,r=0,b=-0,l=0,unit='pt')),
+    axis.title.x=element_text(size=6,vjust=3,margin=margin(t=-0,r=-0,b=0,l=0,unit='pt')),
+    panel.grid.major = element_line(size=0.1,colour="black",linetype="dashed")
+ 
+    )
+ 
+p
+dev.off()
+
+
+#Figure_2G&H
+
+
+proj_name = 'Ke_HLCA'
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+
+srt$cpdb_lvl_2.5_uniform_v4=srt$cpdb_lvl_2.5_uniform_v3
+srt$cpdb_lvl_2.5_uniform_v4[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'AT0'
+table(srt$cpdb_lvl_2.5_uniform_v4)
+
+
+meta_data="cpdb_lvl_2.5_uniform_v3"
+
+
+obj=srt
+
+Idents(obj)="cpdb_lvl_2.5_uniform_v3"
+
+
+
+unique(Idents(obj))
+obj.subtype.list <- SplitObject(obj, split.by = "cpdb_lvl_2.5_uniform_v3") 
+
+sample_age_list <- srt@meta.data %>%
+  dplyr::select(sample, age_info_60_old)%>%
+  group_by(sample,age_info_60_old)
+
+
+str(sample_age_list)
+unique_sample_age_list=unique(sample_age_list)
+
+ggviolin_whisker_opt <- function(...) {
+  opts <- list(...)
+  
+  if ("whisker" %in% names(opts)) {
+    whisk <- opts$whisker
+    opts$whisker <- NULL
+  } else {
+    whisk <- TRUE
+  }
+
+  if ("kruskal" %in% names(opts)) {
+    kruskal <- opts$kruskal
+    opts$kruskal <- NULL
+    opt.group <- opts$kruskal.options[[1]] 
+    opt.label <- opts$kruskal.options[[2]]
+    opt.y <- opts$kruskal.options[[3]]
+    opt.x <- opts$kruskal.options[[4]]
+    opts$kruskal.options <- NULL
+  }
+  
+
+  pl <- do.call(ggviolin, opts)
+  
+
+  if (kruskal) {
+    pl <- pl + stat_compare_means(method = "kruskal.test", 
+                                  group.by = opt.group, 
+                                  label = opt.label, 
+                                  label.y.npc = opt.y, 
+                                  label.x.npc = opt.x)
+  }
+  
+  if (!whisk) {
+   
+    pl <- pl + geom_boxplot(width = 0.1, outlier.shape = NA, coef = 0)
+  }
+  
+ 
+  return(pl)
+}
+
+width=16*1*1/5*2
+height=9*2/3
+
+width=1.4*2
+height=1.8*2
+
+####Choose one gene and run the next function####
+
+gene_ID="IFNG"
+gene_ID="WNT7B"
+gene_ID="WNT5A"
+gene_ID="LRP5"
+gene_ID="LRP6"
+gene_ID="SFRP1"
+
+
+dir.create(paste0(figures.dir,gene_ID,"/"))
+figures.dir.sub=paste0(figures.dir,gene_ID,"/",meta_data)
+dir.create(figures.dir.sub)
+
+for (i in 1:length(obj.subtype.list)) {
+  
+  subtype <- obj.subtype.list[[i]]
+
+
+ res<-unique(names(obj.subtype.list[i]))
+
+
+ print(res)
+
+  Idents(subtype) <- "sample"  
+  subtype1 <- AverageExpression(subtype, slots = "counts", assays = "RNA")[[1]]
+
+  long_subtype1 <- as.data.frame(subtype1) %>%
+  tibble::rownames_to_column("gene") %>%
+  pivot_longer(cols = -gene, names_to = "sample", values_to = "expression")
+
+
+merged_data <- left_join(long_subtype1, unique_sample_age_list, by = "sample")
+merged_data$age_info_60_old <- factor(merged_data$age_info_60_old, levels = c("Young", "Intermediate", "Old"))
+
+                                      
+ifng_data <- merged_data %>%
+  filter(gene == gene_ID)
+
+
+Q1 <- quantile(ifng_data$expression, 0.25)
+Q3 <- quantile(ifng_data$expression, 0.75)
+IQR <- Q3 - Q1
+
+
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+
+
+comparison_results <- compare_means(expression ~ age_info_60_old, data = ifng_data, 
+                                    method = "wilcox.test", 
+                                    comparisons = list(c("Young", "Intermediate"), 
+                                                       c("Intermediate", "Old"), 
+                                                       c("Young", "Old")),
+                                    symnum.args =list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, Inf), symbols = c("****", "***", "**", "*", "ns")),
+                                    p.adjust.method = "fdr"
+                                    )
+
+if (nrow(comparison_results) < 3) {
+  
+  next
+}
+
+comparison_results$p_label <- paste0((comparison_results$p.signif)) 
+
+comparison_results$x_position <- c("Young", "Intermediate", "Old")
+if (nrow(comparison_results) == 0 || all(is.na(comparison_results$p))) {
+  next
+  }
+
+p <- ggviolin(ifng_data, x = "age_info_60_old", y = "expression",
+              color = "age_info_60_old", 
+              palette = c("#0091CA","gray","#D8423D"),
+              add = "boxplot",
+              dot.size=0.1,
+              outlier.shape = NA) +
+  labs(title = paste0(gene_ID), 
+       x = "Age Group", 
+       y = "Expression Level") +
+  theme_classic() +
+  ylim(lower_bound, upper_bound) +  
+  theme(
+    text = element_text(size = 6),  
+    axis.title = element_text(size = 6), 
+    axis.text = element_text(size = 6),   
+    plot.title = element_text(size = 6, hjust = 0.5)  
+  ) +
+  guides(color = "none")  
+bracket_positions <- data.frame(
+  xmin = c(1, 1, 2),  
+  xmax = c(2, 3, 3),  
+  y_position = c(upper_bound * 0.85, upper_bound * 0.83, upper_bound * 0.8) 
+)
+
+
+for (i in 1:nrow(bracket_positions)) {
+  
+  p <- p + geom_path(
+    data = data.frame(
+      x = c(bracket_positions$xmin[i], bracket_positions$xmin[i], bracket_positions$xmax[i], bracket_positions$xmax[i]),
+      y = c(bracket_positions$y_position[i], 
+            bracket_positions$y_position[i] + 0.02, 
+            bracket_positions$y_position[i] + 0.02, 
+            bracket_positions$y_position[i])
+    ),
+    aes(x = x, y = y),
+    inherit.aes = FALSE
+  )
+}
+
+
+comparison_results$x_position <- c(1.5, 2, 2.5)  
+p <- p + geom_text(data = comparison_results, 
+                   aes(x = x_position, label = p_label, y = c(upper_bound * 0.87, 
+                                                             upper_bound * 0.85, 
+                                                             upper_bound * 0.82)), 
+                   vjust = -0.5, 
+                   inherit.aes = FALSE, 
+                   size = 10 * 0.35) 
+
+print(p)
+
+pdf(paste0(figures.dir.sub, "/",gsub(" ","_",res),"_module_score_analyses_with_age60_old_boxplot_withID_",gene_ID,"_v2_whisker_removed_w_args_FDR.pdf"), width = width, height = height, useDingbats=FALSE)
+    print(p)
+    dev.off()
+
+}
