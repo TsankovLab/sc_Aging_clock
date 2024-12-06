@@ -13,4 +13,6 @@ conda env create --file=AgingClock.yml
 conda activate AgingClock
 
 
+Please find the required file for installation in the main repository named "AgingClock.yml".
+
 
