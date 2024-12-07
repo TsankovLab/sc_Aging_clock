@@ -1,0 +1,1432 @@
+rm(list=ls())
+library(dplyr)
+library(patchwork)
+library(harmony)
+library(ggsci)
+library(Rcpp)
+library(SeuratObject)
+library(sp)
+library(harmony)
+library(remotes)
+library(devtools)
+library(Seurat)
+library(viridisLite)
+library(paletteer)
+library(ggplot2)
+library(viridis)
+library(ggnewscale)
+library(RColorBrewer)
+library(cowplot)
+library(grid)
+library(paletteer)
+library(tibble)
+library(circlize)
+library(ComplexHeatmap)
+library(dplyr)
+library(tidyr)
+library(devtools)
+
+out_dir <- "output path"
+srt <- get(load(file="data path...HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
+
+srt <- NormalizeData(object = srt)
+srt <- FindVariableFeatures(srt, selection.method = "vst", nfeatures = 3000)
+srt <- ScaleData(srt)
+srt <- RunPCA(srt, features = VariableFeatures(object = srt))
+srt <- RunUMAP(srt, reduction = "pca", dim=1:15)
+
+srt <- RunHarmony(srt, c("dataset","sample","X3._or_5." ))
+
+srt <- RunUMAP(srt, reduction = "harmony", dim=1:15)
+save ="output path...Ke_HLCA_notNormalized_harmonized_dataset_sample_over1K.Rda"
+
+
+figures.dir = "figures path" 
+metaGroupNames_list = c("cpdb_lvl_2.5_uniform_v3")
+#Cell_type_umap
+for(i in 1:length(metaGroupNames_list))
+{
+  metaGroupNames<-metaGroupNames_list[[i]]
+  print(metaGroupNames)
+  png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels_over1K_harmonized_dataset_sample_x3or5.png'), width=2100*1.2, height=1400*1.2,res=300)
+umap=DimPlot(srt, reduction = "umap",group.by = metaGroupNames,pt.size = .005,label.size=3.5/3,label=FALSE,repel=FALSE, raster = FALSE) + 
+ guides(color = guide_legend(override.aes = list(size=12/12), ncol=1)) +
+ theme(axis.ticks=element_blank(),
+  plot.margin=grid::unit(c(-0/1,0/1,0/1,0/1), "mm"),
+  legend.box.margin = margin(t=0,r=0,b=0,l=-15),
+  legend.key.size = unit(0.2, 'mm'),
+  legend.key.height = unit(0.3, 'mm'),
+  legend.text = element_text(size=6/2,hjust=-0.,margin=margin(t=-0,r=-0,b=-0,l=-6,unit='pt')),
+  plot.title = element_text(size=5,hjust = -0.,vjust=0.01,face="bold",margin = margin(t=0,r=0,b=0.1,l=0)),
+  axis.text.x=element_text(size=2.5,angle = 0, vjust = 1, hjust=0,margin=margin(t=0.5,r=0,b=0,l=0,unit='pt')),
+  axis.text.y=element_text(size=2.5,angle = 0,hjust = 1.5, vjust=0,margin=margin(t=0,r=0.5/1,b=0,l=0,unit='pt')), 
+  axis.title.y=element_text(size=3,vjust = -4,margin=margin(t=0,r=0,b=-0,l=0,unit='pt')),
+  axis.title.x=element_text(size=3,margin=margin(t=0,r=-0,b=0,l=0,unit='pt')) 
+  )+
+    scale_color_manual(values = paletteer_d("ggsci::default_igv"))+
+    guides(color = guide_legend(override.aes = list(size=1), ncol=2)) 
+plot(umap)
+dev.off()
+}
+
+#Age_umap
+
+metaGroupNames_list = c("Age")
+for(i in 1:length(metaGroupNames_list))
+{
+  values=c(0,0.7,1)
+  limits=c(20, 80)
+  metaGroupNames<-metaGroupNames_list[[i]]
+  print(metaGroupNames)
+  png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_dataset_sample_X3._or_5._new_dimplot_wLabels_v2_continuos_core_extension.png'), width=500*1.2, height=400*1.2,res=300)
+
+
+  continuous_palette <- rev(brewer.pal(n = 11, name = "RdBu"))
+  feature_plot <- FeaturePlot(
+    object = srt, 
+    features = metaGroupNames,  
+    reduction = "umap",  
+    pt.size = 0.01,  
+    order = TRUE,
+    raster = FALSE
+ 
+) + 
+  scale_color_gradientn(
+    colors = continuous_palette,
+    values = values,  
+    limits = limits,
+    oob = scales::squish  
+  ) +
+  theme(
+    axis.ticks = element_blank(),
+    plot.margin = grid::unit(c(-0/1, 0/1, 0/1, 0/1), "mm"),
+    legend.box.margin = margin(t = 0, r = 0, b = 0, l = -15),
+    legend.key.size = unit(0.2, 'mm'),
+    legend.key.height = unit(0.3, 'mm'),
+    legend.text = element_text(size = 6/2, hjust = -0., margin = margin(t = -0, r = -0, b = -0, l = -6, unit = 'pt')),
+    plot.title = element_text(size = 5, hjust = -0., vjust = 0.01, face = "bold", margin = margin(t = 0, r = 0, b = 0.1, l = 0)),
+    axis.text.x = element_text(size = 2.5, angle = 0, vjust = 1, hjust = 0, margin = margin(t = 0.5, r = 0, b = 0, l = 0, unit = 'pt')),
+    axis.text.y = element_text(size = 2.5, angle = 0, hjust = 1.5, vjust = 0, margin = margin(t = 0, r = 0.5/1, b = 0, l = 0, unit = 'pt')),
+    axis.title.y = element_text(size = 3, vjust = -4, margin = margin(t = 0, r = 0, b = -0, l = 0, unit = 'pt')),
+    axis.title.x = element_text(size = 3, margin = margin(t = 0, r = -0, b = 0, l = 0, unit = 'pt'))
+  )+ theme_void()+theme(legend.position="none")+ggtitle(NULL)
+
+
+print(feature_plot)
+dev.off()
+pdf(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels.pdf'), width=4, height=4)
+png(paste0(figures.dir,'/UMAPs_',metaGroupNames,'_full_wHarmony_new_dimplot_wLabels.png'), width=1000*1.2, height=800*1.2,res=300)
+umap2 <- FeaturePlot(
+  object = srt, 
+  features = metaGroupNames,  
+  reduction = "umap",  
+  pt.size = 0.01,  
+  order = TRUE,
+  raster = FALSE
+) + 
+  scale_color_gradientn(
+    colors = continuous_palette,
+    values = values,
+    limits = limits, 
+    oob = scales::squish 
+  )
+
+ legends <- cowplot::get_legend(umap2[[1]])
+ 
+plot(legends)
+
+dev.off()
+
+}
+
+#Figure_1C_Boxplots
+
+
+composition_analysis <- function(compartment_seurat_object, category_meta, category_idents, out_dir, refined_label_meta, sampleID_meta, name,number=NULL) {
+    obj <- compartment_seurat_object
+ 
+    # Get sampleIDs for each ident
+    for (i in 1:length(category_idents)){
+        assign(paste0('cat', i), unique(obj@meta.data[,sampleID_meta][obj@meta.data[,category_meta] == category_idents[i]]))
+    }
+ 
+    Dout <- prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2)
+    subtypes <- unique(obj@meta.data[,refined_label_meta])
+    plots <- list()
+    for (subtype in subtypes) {
+        print(subtype)
+        df_vector <- list()
+        for (i in 1:length(category_idents)){
+ 
+            eval(parse(text = paste0('cat',i)))
+ 
+            assign(paste0('class', i), as.vector(Dout[subtype, eval(parse(text = paste0('cat',i)))]))
+            assign(paste0('df.', i), data.frame("Status" = category_idents[i], "Fraction" = eval(parse(text = paste0("class",i))),"ID" = eval(parse(text = paste0('cat',i)))))
+            df_vector[[i]] <- eval(parse(text = paste0('df.', i)))
+        }
+        df <- do.call(rbind, df_vector)
+ 
+        my_comparisons <- combn(category_idents, 2, simplify = FALSE)
+        palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+ 
+        df$Status <- factor(df$Status, levels = category_idents)
+ 
+ 
+        # Plotting
+        plot <- ggplot(df, aes(x = Status, y = Fraction, color = Status)) +
+                geom_boxplot(size = 0.5, outlier.shape = NA, fatten = 1.5) +
+                geom_jitter(width = 0.25, size = 0.3, stroke = 0.1) +
+                scale_color_manual(values = palette) +
+                theme_minimal() +
+                theme(
+                    text = element_text(size = 6, colour = "black"),
+                    plot.title = element_text(size = 6, hjust = 0.5, margin = margin(t = -1.5)),
+                    axis.line = element_line(linewidth = 0.3, colour = "black"),
+                    axis.text.x = element_text(angle = 0, hjust = 0.5, colour = "black", margin = margin(t = -1.5)),
+                    axis.text.y = element_text(angle = 0, colour = "black", margin = margin(r = -1)),
+                    panel.grid.major = element_blank(),
+                    panel.grid.minor = element_blank(),
+                    legend.position = "none"
+                ) +
+                labs(y = "Fraction", x = "") +
+                # scale_x_discrete(labels = category_idents) +
+                scale_x_discrete(labels = c("<40", "40-59", expression(">=60"))) +
+                # stat_compare_means(comparisons = my_comparisons, method = "wilcox.test", label = "p.format", p.adjust = 'bonferroni', size = 2) +
+                stat_compare_means(comparisons = my_comparisons, method = "wilcox.test", label = "p.format", p.adjust = 'fdr', size = 2) +
+                ggtitle(subtype)
+ 
+        plots[[subtype]] <- plot
+ 
+        
+        pdf(paste0(out_dir, "/", paste0(name, "_", subtype, ".pdf")), width=1.1, height=1.7)
+        print(plot)
+        dev.off()
+    }
+    if((number%%4)>0 & number > round(number/4)*4){
+    value=round(number/4)+1
+    } else {
+        value=round(number/4)
+    }
+    while (!is.null(dev.list())) dev.off()
+    pdf(paste0(out_dir, "/",name, "_", category_meta, "_composition_analysis_boxplotover1k.pdf"), 1.1*4, 1.7*value, useDingbats = FALSE)
+    print(cowplot::plot_grid(plotlist = plots, ncol = 4))
+    dev.off()
+}
+ 
+highlevel = srt
+Idents(highlevel)="ann_level_1"
+highlevel2=subset(x = highlevel, subset = ann_level_1 == "Immune", invert=FALSE) 
+#highlevel2=immune
+ 
+
+composition_analysis(
+                        compartment_seurat_object = highlevel3,
+                        category_meta = "age_info_60_old",
+                        category_idents = c("Young", "Intermediate", "Old"),
+                        out_dir <- "output path",
+                        refined_label_meta = "cpdb_lvl_2.5_uniform_v3",
+                        sampleID_meta = "sample",
+                        name = 'age_cpdb_lvl_2.5_uniform_FDR_corrected'
+                        )
+
+
+
+
+#Figure_1D_Heatmap_Age_association
+
+
+bulk <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
+
+unique(modules_df$Annotation)
+
+colnames(modules_df)[1]="cluster"
+
+modules_df <- modules_df[modules_df$Annotation != "T.cells", ]
+modules_df
+
+top10genes<-modules_df%>% group_by(cluster)
+top.genes<-list()
+modules<-unique(modules_df$cluster)
+for (i in 1:length(modules)){
+  name<-modules[i]
+  genes<-as.character(top10genes$gene[which(top10genes$cluster %in% (i-1))]) 
+  top.genes[[name+1]]<-genes
+}
+top.genes
+modules=unique(modules_df$Annotation)
+modules
+
+
+input.df <- as.matrix(log10(GetAssayData(bulk,slot='counts')+1)) 
+rownames(input.df)<-rownames(GetAssayData(bulk,slot='counts'))
+exprs.ave.list<-list()
+
+for (i in 1:length(modules)){
+  markers<-toupper(top.genes[[i]])
+  module_name<-modules[i]
+  print(module_name)
+  index<-which(rownames(input.df) %in% markers)
+  print(length(index))
+  exprs<-input.df[index,, drop = F]
+  rownames(exprs)<-rownames(input.df)[index]
+
+  if (length(index) == 1){
+    exprs.ave.list[[i]]<-exprs
+    print("boop1")
+  }
+  else if (length(index) > 1){
+    exprs.ave.list[[i]]<-colMeans(exprs) 
+    print("boop2")
+  }
+  else {exprs.ave.list[[i]]<-NA
+  print("boop3")
+  print(module_name)}
+}
+
+
+names(exprs.ave.list) <- modules
+modules<-modules[which(!is.na(exprs.ave.list))]
+top.genes<-top.genes[which(!is.na(exprs.ave.list))]
+exprs.ave.list[which(is.na(exprs.ave.list))]<-NULL
+exprs.ave.df<-as.data.frame(t(do.call(rbind,exprs.ave.list)))
+
+bulk$age_trio <- "intermed"
+bulk$age_trio[bulk$AGE == "20-29"] <- "young"
+bulk$age_trio[bulk$AGE == "30-39"] <- "young"
+bulk$age_trio[bulk$AGE == "60-69"] <- "old"
+bulk$age_trio[bulk$AGE == "70-79"] <- "old"
+bulk$age_trio[is.na(bulk$AGE)] <- NA
+
+tmp<-cbind(bulk@meta.data, exprs.ave.df)
+tag <- 'wFDR_bulk_LungCellMarkersFv4_match_HLCA_cpdb_lvl2.5_uniform_v2'
+
+controlling <- FALSE
+model_input <- tmp[, c(modules, 'AGE')]
+
+
+model_input <- model_input[complete.cases(model_input[,c('AGE')]),] 
+controlling <- FALSE
+
+model_input$Age_numeric=0
+model_input$Age_numeric[model_input$AGE =="20-29"] ="24.5"
+model_input$Age_numeric[model_input$AGE =="30-39"] ="34.5"
+model_input$Age_numeric[model_input$AGE =="40-49"] ="44.5"
+model_input$Age_numeric[model_input$AGE =="50-59"] ="54.5"
+model_input$Age_numeric[model_input$AGE =="60-69"] ="64.5"
+model_input$Age_numeric[model_input$AGE =="70-79"] ="74.5"
+
+sum(is.null(model_input$AGE))
+sum(is.na(model_input$AGE))
+sum(is.null(model_input$Age_numeric))
+sum(is.na(model_input$Age_numeric))
+model_input$Age_numeric=as.numeric(model_input$Age_numeric)
+
+
+model_input[is.na(model_input)] <- 0
+
+
+
+Age_model <- function(df){
+
+    if (controlling == TRUE){
+    K_age <- lm(AGE ~ cbind(pack_years_clean, sex_binary, egfr_binary), data=df)
+    age_resi <- residuals(K_age)
+
+    png('age_residuals_histogram.png')
+    hist(age_resi, main = "Residual Histogram")
+    dev.off()
+    final_model_results <- list()
+    j <- 1
+    for (key in modules){
+        final <- glm(df[[key]] ~ age_resi, family='gaussian', data=df)
+        p_val <- unname(coef(summary(final))[,4][2])
+        final_model_results[[j]] <- list(final, key, p_val)
+        j <- j + 1
+    }
+    return(final_model_results)
+
+    } else {
+    final_model_results <- list()
+    j <- 1
+    for (key in modules){
+        
+        model2= cor.test(df$Age_numeric,df[[key]],method = "spearman") 
+        
+        p_val=model2$p.value
+        
+        final_model_results[[j]] <- list(model2, key, p_val)
+        j <- j + 1
+    }
+    return(final_model_results)
+    }
+}
+
+
+model_out <- Age_model(model_input)
+
+out_df <- as.data.frame(do.call(rbind, model_out))
+colnames(out_df) <- c('V1','Name', 'P_value')
+out_df$P_value <- p.adjust(out_df$P_value, method = 'fdr')
+
+Directed_P_Values <- c()
+for (row in 1:nrow(out_df)) {
+    dir_p_val <- out_df[,3][[row]][1] * sign(out_df[,1][[row]]$estimate[1])    
+    Directed_P_Values <- append(Directed_P_Values, dir_p_val)
+}
+Directed_P_Values <- unname(Directed_P_Values)
+out_df$Directed_P_Value <- as.list(Directed_P_Values)
+out_df$V1 <- NULL
+
+colnames(out_df) <- c('Name', 'P_value', 'Directed_P_Value')
+
+out_df$Significance <- 'temp'
+out_df$Significance[out_df$P_value > 0.05] <- 'Not Significant'
+out_df$Significance[out_df$P_value < 0.05] <- 'Significant'
+out_df$direction <- 'temp'
+out_df$direction[out_df$Directed_P_Value > 0] <- 'positive correlation'
+out_df$direction[out_df$Directed_P_Value < 0] <- 'negative correlation'
+
+out_df$Name <- unlist(out_df$Name)
+out_df$P_value  <- unlist(out_df$P_value)
+out_df$Directed_P_Value <- unlist(out_df$Directed_P_Value)
+out_df$Significance <- unlist(out_df$Significance)
+out_df$direction <- unlist(out_df$direction)
+
+out_df$log_pval <- -log10(out_df$P_value)   
+out_df$directed_log_pval <- sign(out_df$Directed_P_Value) * out_df$log_pval
+out_df$direction[out_df$P_value >= 0.05] <- 'not_sig'
+
+bulk_df=out_df
+
+
+sampleID_meta <- 'sample'
+obj=srt
+category_meta_col='age'
+obj=srt
+Idents(srt)="ann_level_1"
+
+Immune=subset(srt,idents=c("Immune"))
+obj=Immune
+refined_label_meta <- 'cpdb_lvl_2.5_uniform_v3'
+sampleID_meta <- 'sample'
+
+out_dir <- paste0(out_dir, category_meta_col, '/', tag, '/')
+    if (!file.exists(out_dir)){
+        dir.create(out_dir, recursive=TRUE)
+    }
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    BMI<- as.factor(obj$BMI)
+    sex<- as.factor(obj$sex)
+    smoking_status=as.factor(obj$smoking_status)
+    self_reported_ethnicity=as.factor(obj$self_reported_ethnicity)
+
+    df <- data.frame(sampleID, Age)
+ 
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+    Dout <- t(prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2))
+    df2 <- as.data.frame.matrix(Dout)
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(Dout), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            p_val=model2$p.value 
+             final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr')
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] < 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        }
+    }
+    out_df$directed_p_value <- directed_p_value
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals >= 0.05] <- 'not_sig'
+
+hlca_df_immune=out_df
+
+
+
+Nonimmune=subset(srt,idents=c("Immune"),invert=TRUE)
+obj=Nonimmune
+out_dir <- paste0(out_dir, category_meta_col, '/', tag, '/')
+    if (!file.exists(out_dir)){
+        dir.create(out_dir, recursive=TRUE)
+    }
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    BMI<- as.factor(obj$BMI)
+    sex<- as.factor(obj$sex)
+    smoking_status=as.factor(obj$smoking_status)
+    self_reported_ethnicity=as.factor(obj$self_reported_ethnicity)
+
+    df <- data.frame(sampleID, Age)
+  
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+    Dout <- t(prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2))
+    df2 <- as.data.frame.matrix(Dout)
+
+    
+    df <- df[match(rownames(Dout), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            p_val=model2$p.value 
+             final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr')
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] < 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        }
+    }
+    out_df$directed_p_value <- directed_p_value
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals >= 0.05] <- 'not_sig'
+
+hlca_df_nonimmune=out_df
+
+
+hlca_df=rbind(hlca_df_immune,hlca_df_nonimmune)
+names(bulk_df)
+names(hlca_df)
+names(hlca_df) <- sub("names", "Name", names(hlca_df))
+names(hlca_df) <- sub("p_vals", "P_value", names(hlca_df))
+names(hlca_df) <- sub("directed_p_value", "Directed_P_Value", names(hlca_df))
+
+name_mapping <- c(
+  "B" = "B.cells",
+  "Bloodvessels" = "Endothelial",
+  "Ionocyte" = "Ionocytes",
+  "PNEC"="Neuroendocrine",
+  "Tuft"="Tuft.like",
+  "NK"="NK.cells",
+  "Fibroblasts"="Fibroblast",
+  "Multiciliated"="Ciliated",
+  "Basal resting"="Basal",
+  "Tcells"="T.cells"
+  
+)
+
+
+
+hlca_df <- hlca_df %>%
+  mutate(Name = ifelse(Name %in% names(name_mapping), name_mapping[Name], Name))
+
+
+bulk_df$Source <- 'GTEx'
+hlca_df$Source <- 'HLCA'
+
+
+combined_df <- full_join(bulk_df, hlca_df, by = "Name", suffix = c(".Bulk", ".HLCA"))
+
+combined_df <- combined_df %>%
+  mutate(P_value.Bulk = ifelse(is.na(P_value.Bulk), 0.99, P_value.Bulk),
+    Directed_P_Value.Bulk=ifelse(is.na(Directed_P_Value.Bulk), 0.99, Directed_P_Value.Bulk),
+        
+         Significance.Bulk = ifelse(is.na(Significance.Bulk), "Not Significant", Significance.Bulk),
+         direction.Bulk=ifelse(is.na(direction.Bulk), "not_sig", direction.Bulk),
+         Source.Bulk=ifelse(is.na(Source.Bulk), "GTEx", Source.Bulk))
+combined_df <- combined_df %>%
+  mutate(directed_log_pval.Bulk = ifelse(is.na(directed_log_pval.Bulk), log10(0.99), directed_log_pval.Bulk),
+         log_pval.Bulk = ifelse(is.na(log_pval.Bulk), log10(0.99), log_pval.Bulk))
+
+
+library(dplyr)
+library(tidyr)
+
+heatmap_data <- combined_df %>%
+  dplyr::select(Name, directed_log_pval.Bulk, directed_log_pval.HLCA) %>%
+  pivot_longer(
+    cols = c(directed_log_pval.Bulk, directed_log_pval.HLCA),
+    names_to = "Dataset",
+    values_to = "directed_log_pval",
+    names_prefix = "directed_log_pval."
+  ) 
+
+significance_annotations <- combined_df %>%
+  dplyr::select(Name, P_value.Bulk, P_value.HLCA) %>%
+  pivot_longer(cols = -Name, names_to = "Dataset", values_to = "P_value") %>%
+  mutate(Dataset = sub("P_value.", "", Dataset),
+         Significance = ifelse(P_value < 0.05, "*", ""))
+
+
+
+
+color_mapping <- colorRamp2(c(-max(abs(heatmap_data$directed_log_pval)), 0, max(abs(heatmap_data$directed_log_pval))), c("blue", "white", "red"))
+
+
+heatmap_matrix <- heatmap_data %>%
+  spread(key = Dataset, value = directed_log_pval) %>%
+  column_to_rownames(var = "Name")
+
+heatmap_matrix <- heatmap_data %>%
+  spread(key = Dataset, value = directed_log_pval) %>%
+  column_to_rownames(var = "Name") %>%
+  as.matrix()
+
+max_val <- max(abs(heatmap_matrix), na.rm = TRUE)
+color_mapping <- colorRamp2(c(-max_val, 0, max_val), c("blue", "white", "red"))
+color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+heatmap_matrix[is.na(heatmap_matrix)] <- 0
+heatmapAnnotation <- function(j, i, x, y, w, h, fill) {
+    value <- abs(t(as.matrix(heatmap_matrix))[i, j])
+    
+    if (value > 3) {
+        grid::grid.text("****", x, y, rot=90)
+    } else if (value > 2) {
+        grid::grid.text("***", x, y, rot=90)
+    } else if (value > 1.3) {
+        grid::grid.text("**", x, y, rot=90)
+    } else if (value > 1) {
+        grid::grid.text("*", x, y, rot=90)
+    }
+}
+
+
+color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+
+p_heatmap <- ComplexHeatmap::Heatmap(
+  t(as.matrix(heatmap_matrix)), 
+  cluster_rows = FALSE, 
+  cluster_columns = FALSE, 
+  name = "-log10p",
+  col = color_mapping,
+  
+  row_names_gp = grid::gpar(fontsize = 6),  
+  column_names_gp = grid::gpar(fontsize = 6), 
+  
+  heatmap_legend_param = list(
+    title_gp = grid::gpar(fontsize = 6),     
+    labels_gp = grid::gpar(fontsize = 6)   
+  ),
+  
+
+  rect_gp = grid::gpar(col = "white", lwd = 2),
+  
+  
+  cell_fun = heatmapAnnotation
+)
+
+
+
+write.csv(out_df,file=paste0("output path/Bulk_gene_expression_age_spearman_JasonJi.csv"))
+
+
+projDir="output path"
+dir.create(projDir)
+    dir.create(file.path(projDir, "plots/heatmaps/Composition_analysis_spearman/over_1k/Immune_Nonimmune/"), recursive = T, showWarnings = F)
+
+
+    pdf(file = file.path(projDir, 
+                         "plots/heatmaps/Composition_analysis_spearman/over_1k/Immune_Nonimmune/", 
+                         paste("Composition_analysis_spearman_bulk_hlca_v2_wFDR_removeT_redo_v3_10-10", "pdf", sep = ".")),
+
+        width = 12/3, # 2 * 10
+        height = 3/2) # 2 * 6
+    
+    print(p_heatmap)
+
+    dev.off()
+
+
+
+#Figure_1F
+
+
+normal <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
+normal$age_trio <- "40-59"
+normal$age_trio[normal$AGE == "20-29"] <- "<40"
+normal$age_trio[normal$AGE == "30-39"] <- "<40"
+normal$age_trio[normal$AGE == "60-69"] <- ">=60"
+normal$age_trio[normal$AGE == "70-79"] <- ">=60"
+normal$age_trio[is.na(normal$AGE)] <- NA
+
+
+gene_list=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+
+gene_name=c("CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK2", "CCNA2", "MAPK14", "ATM", "TP53", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "RB1", "RELA", "SIRT1", "CDK4", "CDK6", "CDKN1B", 
+  "IGFBP7", "MIF", "SERPINE1", "TERT", "E2F1", "STAT3", "NBN", "FOS", "PTEN", "NFKB1", "CEBPB","PML", "TERF2", "FOXM1", "MAPK9", "MAPK3", "MAP3K5", "LMNB1", "BMI1", "MDM2", "SIRT6", 
+  "MAP2K3", "MAP2K6", "MAPK1")
+# removing HRAS AS NOT SHOWN indataset
+#names(gene_name)="JasonCore_SASP"
+ 
+#gene_name=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+gene_name_2=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+# Removing TNF as not shown in data
+names(gene_name)="Lee_Optimized_woCellMarker"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="Ji_Lee_Union_SASP"
+gene_list=gene_name
+names(gene_list)=gene_list
+top.genes<-list()
+top.genes[["Ji_Lee_Union_SASP"]] = gene_name
+modules="Ji_Lee_Union_SASP"
+
+data.type<-''
+
+input.df <- as.matrix(log10(GetAssayData(normal,slot='counts')+1))
+
+rownames(input.df)<-rownames(GetAssayData(normal,slot='counts'))
+
+exprs.ave.list<-list()
+
+
+for (i in 1:length(modules)){
+  
+  markers<-toupper(top.genes[[i]])
+  module_name<-modules[i]
+  print(module_name)
+  index<-which(rownames(input.df) %in% markers)
+  print(length(index))
+  exprs<-input.df[index,, drop = F]
+  rownames(exprs)<-rownames(input.df)[index]
+  
+  if (length(index) == 1){
+    exprs.ave.list[[i]]<-exprs
+    print("boop1")
+  }
+  else if (length(index) > 1){
+    exprs.ave.list[[i]]<-colMeans(exprs)
+    print("boop2")
+  }
+  else {exprs.ave.list[[i]]<-NA
+  print("boop3")
+  print(module_name)}
+}
+
+modules<-modules[which(!is.na(exprs.ave.list))]
+top.genes<-top.genes[which(!is.na(exprs.ave.list))]
+exprs.ave.list[which(is.na(exprs.ave.list))]<-NULL
+names(exprs.ave.list)<-paste0(modules,data.type)
+exprs.ave.df<-as.data.frame(t(do.call(rbind,exprs.ave.list)))
+
+
+tmp<-cbind(normal@meta.data, exprs.ave.df)
+
+tmp$age_trio <- factor(tmp$age_trio, levels = c("<40", "40-59", ">=60"))
+colnames(tmp)
+#colnames(tmp)[72] <- paste0(colnames(tmp)[72], "_")
+#modules <- paste0(modules, "_")
+
+library(ggpubr)
+library(ggplot2)
+mean.plots <- list()
+
+my_comparisons <- list( c("young", "intermed"), c("intermed", "old"), c("young", "old"))
+my_comparisons <- list( c("<40", "40-59"), c("40-59", ">=60"), c("<40", ">=60"))
+
+tmp <- tmp[!is.na(tmp$age_trio),]
+
+for (module in modules){
+  print(paste0(module, "_"))
+  
+  mean.plot <- ggboxplot(tmp, x = "age_trio", y = module,
+                         color = "age_trio", palette = c("#0091CA","gray","#D8423D"),
+                         title = module) +
+    
+    stat_compare_means(comparisons = my_comparisons,p.adjust.method = "fdr") +
+    
+    
+    theme(plot.title = element_text(size = 12, face = "bold")) 
+  
+  mean.plots[[module]] <- mean.plot
+}
+
+
+
+
+module_name="Senescence"
+
+height_factor=max(1,length(modules)/4)
+projDir="output pat"
+
+pdf(paste0(projDir,module_name,"senescence_modules_deconvolution_v2_reproduced.pdf"), width = 2.5*4, height = 4*height_factor, useDingbats=FALSE)
+cowplot::plot_grid(plotlist = mean.plots, ncol=4)
+dev.off() 
+
+
+#Figure_1G
+
+
+srt=get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+
+gene_name=c("CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK2", "CCNA2", "MAPK14", "ATM", "TP53", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "RB1", "RELA", "SIRT1", "CDK4", "CDK6", "CDKN1B", 
+  "IGFBP7", "MIF", "SERPINE1", "TERT", "E2F1", "STAT3", "NBN", "FOS", "PTEN", "NFKB1", "CEBPB","PML", "TERF2", "FOXM1", "MAPK9", "MAPK3", "MAP3K5", "LMNB1", "BMI1", "MDM2", "SIRT6", 
+  "MAP2K3", "MAP2K6", "MAPK1")
+
+names(gene_name)="JasonCore_SASP"
+
+gene_name=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+gene_name_2=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+
+names(gene_name)="Lee_Optimized_woCellMarker"
+
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="Ji_Lee_Union_SASP"
+
+method="spearman_wFDR_percelltype"
+
+if(!all(gene_name %in% rownames(srt@assays$RNA@data))) {
+  missing_genes <- gene_name[!gene_name %in% rownames(srt@assays$RNA@data)]
+  stop("The following genes are not found in the dataset: ", paste(missing_genes, collapse=", "))
+}
+
+
+grep(pattern = gene_name, x = rownames(srt), value = TRUE)
+
+
+cdkn2a_data_2 <- srt@assays$RNA@data[gene_name, ]
+
+length(srt$sample)
+length(srt$LTforUnknown_ann_finest_level)
+nrow(cdkn2a_data_2)
+length(srt$age_info_60_old)
+
+CellType = "cpdb_lvl_2.5_uniform_v3"
+
+
+heatmap_df_all_genes <- data.frame(
+  SampleID = srt$sample,
+  
+  CellType = srt$cpdb_lvl_2.5_uniform_v2,  
+ 
+  Age = srt$Age  
+)
+gene_names <- rownames(cdkn2a_data_2)
+
+for (gene in gene_names) {
+ 
+  gene_expression <- as.numeric(cdkn2a_data_2[gene, ])
+  
+  heatmap_df_all_genes[[gene]] <- gene_expression
+}
+
+library(dplyr)
+library(tidyr)
+
+long_df <- heatmap_df_all_genes %>%
+  pivot_longer(
+    cols = 4:ncol(heatmap_df_all_genes), 
+    names_to = "Gene",
+    values_to = "GeneExpression"
+  )
+
+df_sample_2 <- long_df %>%
+  group_by(SampleID, Age, CellType, Gene) %>%
+  summarize(GeneExpression = mean(expm1(GeneExpression), na.rm = TRUE), .groups = 'drop') %>% # Delog the gene expression
+  mutate(GeneExpression = log1p(GeneExpression))
+filtered_df=df_sample_2
+
+if (exists("results")) {
+  rm(results)
+}
+
+results <- filtered_df %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$p.value  
+        
+    }, error = function(e) {
+      1
+    }),
+    .groups = 'drop'
+  )
+results <- results %>%
+  group_by(CellType) %>% 
+  mutate(P_Value = p.adjust(P_Value, method = "fdr")) %>% 
+  ungroup() 
+
+str(results)
+results <- results %>%
+  left_join(
+    filtered_df %>%
+      group_by(Gene, CellType) %>%
+      summarise(Correlation = cor(Age, GeneExpression, method = "spearman", use = "complete.obs"), .groups = 'drop'), 
+    by = c("Gene", "CellType")
+  ) %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = first(P_Value),  
+    Direction = ifelse(Correlation > 0, "Increase", "Decrease"),  
+    .groups = 'drop'
+  )
+
+results <- results %>%
+  mutate(
+    NegLog10_P_Value = -log10(P_Value + 1e-300),  
+    Highlight = ifelse(P_Value < 0.05, "Significant", "Not Significant")
+  )
+
+results <- results %>%
+  mutate(NegLog10_P_Value = ifelse(NegLog10_P_Value == 300, 0, NegLog10_P_Value))
+
+size_breaks <- c(-log10(0.05), -log10(0.01))
+size_labels <- c("0.05", "0.01")
+size_values <- scales::rescale(c(-log10(0.05), -log10(0.01)), to = c(2, 6))
+
+results <- results %>%
+  mutate(
+    Size = ifelse(P_Value < 0.05, NegLog10_P_Value, NegLog10_P_Value / 2),  # Scale size
+    Alpha = ifelse(P_Value < 0.05, 1, 0.5) 
+  )
+
+desired_order <- c("AT1", "AT2", "Basal resting","Suprabasal","Hillock-like", "Secretory", "Multiciliated","Club","Goblet","PNEC","Tuft","Ionocyte",
+"SMG",
+"HSC", "Macrophages", "Monocytes", "DC","pDCs",
+"B","Plasma","Mast",
+"CD4T","CD8T","NK",
+"LymphaticEC","Bloodvessels","SmoothMuscle","Fibroblasts","Pericytes","Mesothelium")
+
+results$CellType <- factor(results$CellType, levels = desired_order)
+
+max(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+min(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+
+
+if (exists("results")) {
+  rm(results)
+}
+
+
+results <- filtered_df %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    Spearman_Coeff = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$estimate  
+    }, error = function(e) {
+      0  
+    }),
+    P_Value = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$p.value  
+    }, error = function(e) {
+     
+    }),
+    .groups = 'drop'
+  )
+
+
+results <- results %>%
+  group_by(CellType) %>%  
+  mutate(P_Value = p.adjust(P_Value, method = "fdr")) %>% 
+  ungroup()  
+
+
+str(results)
+
+results <- results %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = first(P_Value), 
+    Spearman_Coeff = first(Spearman_Coeff), 
+    Direction = ifelse(Spearman_Coeff > 0, "Increase", "Decrease"),  
+    .groups = 'drop'
+  )
+
+
+results <- results %>%
+  mutate(
+    NegLog10_P_Value = -log10(P_Value + 1e-300),  
+    Highlight = ifelse(P_Value < 0.05, "Significant", "Not Significant")
+  )
+
+results <- results %>%
+  mutate(NegLog10_P_Value = ifelse(NegLog10_P_Value == 300, 0, NegLog10_P_Value))
+
+
+size_breaks <- c(-log10(0.05), -log10(0.01))
+size_labels <- c("0.05", "0.01")
+size_values <- scales::rescale(c(-log10(0.05), -log10(0.01)), to = c(2, 6))
+
+
+results <- results %>%
+  mutate(
+    Size = ifelse(P_Value < 0.05, NegLog10_P_Value, NegLog10_P_Value / 2),  
+    Alpha = ifelse(P_Value < 0.05, 1, 0.5) 
+    
+  )
+
+
+results <- results %>%
+  mutate(
+    Significance = case_when(
+      P_Value < 0.05 ~ "0.05",
+      P_Value < 0.1 ~ "0.1",
+      TRUE ~ "ns"
+    )
+  )
+desired_order <- c("AT1", "AT2", "Basal", "Secretory", "Multiciliated","Club","Goblet","PNEC","Tuft","Ionocyte",
+"SMG",
+"HSC", "Macrophages", "Monocytes", "DC","pDCs",
+"B","Plasma","Mast",
+"CD4T","CD8T","NK",
+"LymphaticEC","Bloodvessels","SmoothMuscle","Fibroblasts","Pericytes","Mesothelium")
+results$CellType <- factor(results$CellType, levels = desired_order)
+
+max(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+min(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+
+write.csv(results,file=paste0(figures.dir,"/HLCA_full_all_",names(gene_name)[1],"_dotplot_Pvalues&direction_using_data_",CellType,"_Median_seurat_AE_Log1pMeanExpm1_v2_",method,".csv"))
+
+dot_plot=NULL
+
+dot_plot <- ggplot(results, aes(x = Gene, y = CellType, size = NegLog10_P_Value)) +
+  
+  
+  geom_point(shape = 21, aes(color = Significance, fill = Spearman_Coeff), stroke = 1, show.legend = TRUE) +
+  
+  
+  scale_color_manual(values = c("0.05" = "black", "0.1" = "gray", "ns" = "transparent")) +
+  
+
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  
+
+  scale_size_continuous(range = c(0.2, 2.5)) +
+  
+
+  labs(
+    title = paste0("Dot Plot of ", names(gene_name)[1], " Gene Expression Changes"),
+    x = "Gene",
+    y = "Cell Type",
+    fill = "Spearman Coefficient",
+    color = "Significance",
+    size = "-Log10 P-Value"
+  ) +
+  
+  
+  theme_minimal() +
+  
+
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),  # Font size for x-axis
+    axis.text.y = element_text(size = 6),  
+    axis.title.x = element_text(size = 6),  
+    axis.title.y = element_text(size = 6),  
+    legend.text = element_text(size = 6),  
+    legend.title = element_text(size = 6),  
+    plot.title = element_text(size = 6),
+    legend.key.size = unit(0.3, "cm"), 
+    legend.spacing = unit(0.2, "cm"),   
+    legend.margin = margin(0, 0, 0, 0),  
+    legend.box.margin = margin(0, 0, 0, 0)  
+  )
+
+
+print(dot_plot)
+
+dir.create(paste0(figures.dir,"/cpdb_lvl_2.5_uniform_v3"))
+
+figures.dir.sub=paste0(figures.dir,"/cpdb_lvl_2.5_uniform_v3")
+pdf(file=paste0(figures.dir.sub,"/HLCA_full_all_",names(gene_name)[1],"_dotplot_Pvalues&direction_using_data_",CellType,"_Median_seurat_AE_Log1pMeanExpm1_v2_",method,".pdf"),
+  height=sqrt(length(unique(heatmap_df_all_genes$CellType)))-2,
+  width=log(length(gene_name))+3)
+dot_plot
+dev.off()
+
+
+#Figure_1H
+
+
+srt <- get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+table(srt$cpdb_lvl_2.5_uniform_v2)
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+refined_label_meta <- 'cpdb_lvl_2.5_uniform_v3'
+sampleID_meta <- 'sample'
+
+gene_name="MKI67"
+gene_list=gene_name
+names(gene_list)=gene_list
+
+
+gene_name=c("CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK2", "CCNA2", "MAPK14", "ATM", "TP53", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "RB1", "RELA", "SIRT1", "CDK4", "CDK6", "CDKN1B", 
+  "IGFBP7", "MIF", "SERPINE1", "TERT", "E2F1", "STAT3", "NBN", "FOS", "PTEN", "NFKB1", "CEBPB","PML", "TERF2", "FOXM1", "MAPK9", "MAPK3", "MAP3K5", "LMNB1", "BMI1", "MDM2", "SIRT6", 
+  "MAP2K3", "MAP2K6", "MAPK1")
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+obj <- AddModuleScore(object = obj, features = gene_list, name = names(gene_list))
+
+if(length(gene_list[[1]])>1){
+   module_scores <- obj@meta.data[,paste0(names(gene_list),"1")] 
+   aggregate_data <- aggregate(module_scores, 
+    by = list(cell_type = obj@meta.data[, refined_label_meta],
+    sample = obj@meta.data[, sampleID_meta]), 
+    FUN = median)
+   } else{
+    module_scores <- obj@assays$RNA@data[names(gene_list), ]
+aggregate_data2=AverageExpression(obj,group.by = c(sampleID_meta,refined_label_meta),layer="data")
+expr_matrix <- aggregate_data2$RNA
+column_names <- colnames(expr_matrix)
+cleaned_column_names <- sub("data\\[.*,\\s.*\\]:", "", column_names)
+
+mki67_data <- expr_matrix[names(gene_list), ]
+
+split_names <- do.call(rbind, strsplit(cleaned_column_names, "_(?!.*_)", perl = TRUE))
+
+
+samples <- split_names[, 1]  
+cell_types <- split_names[, 2]  
+
+
+aggregate_dataX <- data.frame(
+  cell_type = cell_types,
+  sample = samples,
+  x = as.numeric(mki67_data)
+)
+
+aggregate_dataX <- aggregate_dataX[order(aggregate_dataX$sample), ]
+
+rownames(aggregate_dataX)=NULL
+aggregate_dataX$x=log1p(aggregate_dataX$x)
+
+aggregate_data=aggregate_dataX
+
+   }
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    #out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr') #editable
+
+    # Convert NA in p_vals to 1
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    # Convert NA in gradients to 0
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+    png(paste0(out_dir, category_meta_col, '_', tag, "Senescence_expression_lollipop_test_woFDRall.png"), height = 800, width = 800)
+    print(figs)
+    dev.off()
+
+    pdf(paste0(out_dir, category_meta_col, '_', tag, "Senescence_expression_lollipop_test_woFDRall.pdf"), height = 6, width = 8)
+    print(figs)
+    dev.off()
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "Senescence_subtype_expression_regression_model_output_woFDRall.csv"), row.names = FALSE)
+}
+obj = srt
+category_meta_col='Age'
+tag = "lollipop"
+file_path <- paste0(out_dir, category_meta_col, "_", tag, "Senescence_subtype_expression_regression_model_output_woFDRall.csv")
+print(file_path)
+expression_regression_model(obj=srt, category_meta_col='Age', tag= "lollipop", out_dir = "output path")
+
+
+#Figure_1I
+
+
+normal <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
+normal$age_trio <- "40-59"
+normal$age_trio[normal$AGE == "20-29"] <- "<40"
+normal$age_trio[normal$AGE == "30-39"] <- "<40"
+normal$age_trio[normal$AGE == "60-69"] <- ">=60"
+normal$age_trio[normal$AGE == "70-79"] <- ">=60"
+normal$age_trio[is.na(normal$AGE)] <- NA
+
+gene_name="MKI67"
+gene_list=gene_name
+names(gene_list)=gene_list
+
+
+gene_name=c("CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK2", "CCNA2", "MAPK14", "ATM", "TP53", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "RB1", "RELA", "SIRT1", "CDK4", "CDK6", "CDKN1B", 
+  "IGFBP7", "MIF", "SERPINE1", "TERT", "E2F1", "STAT3", "NBN", "FOS", "PTEN", "NFKB1", "CEBPB","PML", "TERF2", "FOXM1", "MAPK9", "MAPK3", "MAP3K5", "LMNB1", "BMI1", "MDM2", "SIRT6", 
+  "MAP2K3", "MAP2K6", "MAPK1")
+
+
+data.type<-''
+
+input.df <- as.matrix(log10(GetAssayData(normal,slot='counts')+1))
+
+rownames(input.df)<-rownames(GetAssayData(normal,slot='counts'))
+
+exprs.ave.list<-list()
+
+
+for (i in 1:length(modules)){
+  
+  markers<-toupper(top.genes[[i]])
+  module_name<-modules[i]
+  print(module_name)
+  index<-which(rownames(input.df) %in% markers)
+  print(length(index))
+  exprs<-input.df[index,, drop = F]
+  rownames(exprs)<-rownames(input.df)[index]
+  
+  if (length(index) == 1){
+    exprs.ave.list[[i]]<-exprs
+    print("boop1")
+  }
+  else if (length(index) > 1){
+    exprs.ave.list[[i]]<-colMeans(exprs)
+    print("boop2")
+  }
+  else {exprs.ave.list[[i]]<-NA
+  print("boop3")
+  print(module_name)}
+}
+
+modules<-modules[which(!is.na(exprs.ave.list))]
+top.genes<-top.genes[which(!is.na(exprs.ave.list))]
+exprs.ave.list[which(is.na(exprs.ave.list))]<-NULL
+names(exprs.ave.list)<-paste0(modules,data.type)
+exprs.ave.df<-as.data.frame(t(do.call(rbind,exprs.ave.list)))
+
+
+tmp<-cbind(normal@meta.data, exprs.ave.df)
+
+tmp$age_trio <- factor(tmp$age_trio, levels = c("<40", "40-59", ">=60"))
+colnames(tmp)
+#colnames(tmp)[72] <- paste0(colnames(tmp)[72], "_")
+#modules <- paste0(modules, "_")
+
+library(ggpubr)
+library(ggplot2)
+mean.plots <- list()
+
+my_comparisons <- list( c("young", "intermed"), c("intermed", "old"), c("young", "old"))
+my_comparisons <- list( c("<40", "40-59"), c("40-59", ">=60"), c("<40", ">=60"))
+
+tmp <- tmp[!is.na(tmp$age_trio),]
+
+for (module in modules){
+  print(paste0(module, "_"))
+  
+  mean.plot <- ggboxplot(tmp, x = "age_trio", y = module,
+                         color = "age_trio", palette = c("#0091CA","gray","#D8423D"),
+                         title = module) +
+    
+    stat_compare_means(comparisons = my_comparisons,p.adjust.method = "fdr") +
+    
+    
+    theme(plot.title = element_text(size = 12, face = "bold")) 
+  
+  mean.plots[[module]] <- mean.plot
+}
+
+
+
+
+module_name="MKI67"
+
+height_factor=max(1,length(modules)/4)
+projDir="output pat"
+
+pdf(paste0(projDir,module_name,"_modules_deconvolution_v2_reproduced.pdf"), width = 2.5*4, height = 4*height_factor, useDingbats=FALSE)
+cowplot::plot_grid(plotlist = mean.plots, ncol=4)
+dev.off() 
+
+
+
+
