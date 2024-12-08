@@ -253,15 +253,15 @@ out_df$direction[abs(out_df$directed_log_pval) <= 1.3] <- 'not_sig'
 figs <- list()
 
 m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
-                color = "direction",                             # Color by groups
-                palette = c("#00AFBB", "#D3D3D3", "#FC4E07"),    # Custom color palette
-                sorting = "descending",                         # Sort value in descending order
-                add = "segments",                               # Add segments from y = 0 to dots
-                add.params = list(color = "lightgray", size = 2), # Change segment color and size
+                color = "direction",                             
+                palette = c("#00AFBB", "#D3D3D3", "#FC4E07"),    
+                sorting = "descending",                        
+                add = "segments",                               
+                add.params = list(color = "lightgray", size = 2),
                 title = paste0('spearman regression composition analysis'),
-                dot.size = 8,                                   # Large dot size
-                font.label = list(color = "white", size = 8, vjust = 0.5), # Adjust label parameters
-                ggtheme = theme_pubr()                          # ggplot2 theme
+                dot.size = 8,                                  
+                font.label = list(color = "white", size = 8, vjust = 0.5), 
+                ggtheme = theme_pubr()                        
 ) +
     geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
     geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
