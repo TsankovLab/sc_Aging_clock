@@ -8,7 +8,7 @@ R Version: 4.1.0
 
 Installing the conda environment:
 ```
-conda env create --file=AgingClock.yml
+conda env create --file=AgingClock.yaml
 conda activate AgingClock
 ```
 
