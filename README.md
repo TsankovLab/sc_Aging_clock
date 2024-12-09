@@ -16,8 +16,9 @@ Please find the required file for installation in the main repository named "Agi
 
 
 ### PBMCs
+
 '''
-# load Seurat object created by ___
+
 library(Seurat)
 library(scRepertoire)
 library(harmony)
@@ -27,20 +28,15 @@ library(stringr)
 library(gridExtra)
 
 options(Seurat.object.assay.version = 'v3')
-#######################################
-# Preliminary Analysis
-#######################################
 
 
-###################### 
+
 directory_path <- "./tcrs/"
 
-# csv file with files
 csv_files <- list.files(directory_path, pattern="\\.csv$", full.names=TRUE)
 
 csv_data_list <- list()
 
-# modify barcodes
 for(file_path in csv_files) {
       file_name <- basename(file_path)
       parts <- strsplit(file_name, "AS")[[1]]
@@ -65,11 +61,9 @@ for(file_path in csv_files) {
 
 contig_list <- lapply(csv_data_list, function(df) loadContigs(df, format = "10X"))
 combined3 <- combineTCR(removeMulti = TRUE, removeNA = TRUE, contig_list)
-# apply the names to the list
 tcrL_tumor = lapply (csv_files, function(x) read.csv(x))
 names (combined2) = c(sorted_identifiers)
 
-# Creating seurat object with cloneSizes
 sce <- combineExpression(combined3, 
                   data, 
                   cloneCall="gene",
