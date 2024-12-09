@@ -340,5 +340,5 @@ for (i in 1:ncol(res.comp))
                               draw.legend = T,
                               legend.label = sort(unique(infos.2$labeling)),
                               bg.by = "labeling")
-
+}
 #
