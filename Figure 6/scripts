@@ -1,1 +1,344 @@
+rm(list = ls())
+library(pheatmap)
+library(dplyr)
 
+
+#Figure_6A
+
+
+srt=get(load(file="dataset path"))
+out_dir <- "output path"
+refined_label_meta <- 'LTforUnknown_ann_finest_level'
+
+sampleID_meta <- 'sample'
+
+obj=srt
+category_meta_col='Age'
+tag=paste0('total_woFDR_',refined_label_meta)
+
+cor.m.colors <- function(){
+  colors <- c("#003BC0", "#FFFFFF", "#D80D29")
+  paletteLength <- 100
+  colors_step <- colorRampPalette(colors)(paletteLength)
+  breaks <- c(seq(-1, 0, length.out=50), 
+              seq(0.01, 1, length.out=50))
+  return(list(colors = colors_step, breaks = breaks))
+}
+
+props.m.colors <- function(props.m){
+  colors <- c("#0A6265","#5BC3AE", "#E7E1BD" , "#ECA24D", "#DB4325")
+  paletteLength <- 100
+  seqs <- seq(0, max(props.m), length.out = 5)
+  colors_step <- colorRampPalette(colors)(paletteLength)
+  breaks <-   c(seq(seqs[1], seqs[2], length.out=25), 
+                seq(seqs[2]+0.01, seqs[3], length.out=25),
+                seq(seqs[3]+0.01, seqs[4], length.out=25),
+                seq(seqs[4]+0.01, seqs[5], length.out=25))
+  return(list(colors = colors_step, breaks = breaks))
+}
+
+calc.prop.by.feature <- function(dfs, group.by, ident.by){
+  all.groups <- unique(Reduce(c, lapply(dfs, function(df) unique(df[,group.by]))))
+  freqs.by.type <- lapply(names(dfs), function(df.name){
+    df.tmp <- dfs[[df.name]][,c(group.by, ident.by)]
+    
+    return(as.data.frame.matrix(prop.table(table(df.tmp[,c(group.by, ident.by)]), margin = 1))[all.groups,])
+  })
+  names(freqs.by.type) <- names(dfs)
+  return(freqs.by.type)
+}
+
+plot.freq.by.type <- function(dfs, group.by, ident.by, path){
+  dfs.freq <- calc.prop.by.feature(dfs, group.by, ident.by)
+  dfs.freq.env <<- dfs.freq
+  path.freqs <- paste(path, "/by.type/", sep = "")
+  dir.create(path.freqs, recursive = T)
+  for (df.name in names(dfs.freq)){
+    df <- dfs.freq[[df.name]]
+    colors.heatmap <- props.m.colors(df)
+    while (!is.null(dev.list()))  dev.off()
+    pdf(paste(path.freqs, df.name, ".pdf", sep = ""), height = 0.5*nrow(df) + 2, width = 0.5*ncol(df)+2)
+    
+    pheatmap(df, color = colors.heatmap$colors, breaks = colors.heatmap$breaks,
+             main = paste(df.name, " - No scaling", sep = ""),
+    )
+    pheatmap(df, color = colors.heatmap$colors, breaks = colors.heatmap$breaks,
+             main = paste(df.name, " - Scaling by row", sep = ""), scale= "row")
+    pheatmap(df, color = colors.heatmap$colors, breaks = colors.heatmap$breaks,
+             main = paste(df.name, " - Scaling by column", sep = ""), scale = "column")
+    while (!is.null(dev.list()))  dev.off()
+  }
+}
+
+plot.all.freqs <- function(dfs, group.by, ident.by, path){
+  df.prop.by.type <- do.call(cbind, unname(calc.prop.by.feature(dfs, group.by, ident.by)))
+  path.all.types <- paste(path, "/all.types/", sep = "")
+  dir.create(path.all.types, recursive = T)
+  scale.colors <- props.m.colors(df.prop.by.type)
+  while (!is.null(dev.list()))  dev.off()
+  pdf(paste(path.all.types, "frequencies.pdf", sep = ""), height = 0.5*nrow(df.prop.by.type) + 2, width = 0.5*ncol(df.prop.by.type)+2)
+  pheatmap(df.prop.by.type, main = paste("No scaling", sep = ""), color = scale.colors$colors, breaks = scale.colors$breaks)
+  pheatmap(df.prop.by.type, main = paste("Scaling by row", sep = ""), scale= "row", color = scale.colors$colors, breaks = scale.colors$breaks)
+  pheatmap(df.prop.by.type, main = paste("Scaling by column", sep = ""), scale= "column", color = scale.colors$colors, breaks = scale.colors$breaks)
+  while (!is.null(dev.list()))  dev.off()
+}
+
+plot.frequencies <- function(dfs, group.by, ident.by, path){
+  plot.freq.by.type(dfs, group.by, ident.by, path)
+  plot.all.freqs(dfs, group.by, ident.by, path)
+}
+
+plot.corr.matrix <- function(cor.matrix, path){
+  path.all.types <- paste(path, "/all.types/", sep = "")
+  dir.create(path.all.types, recursive = T)
+  colors.heatmap <- cor.m.colors()
+  while (!is.null(dev.list()))  dev.off()
+  pdf(paste(path.all.types, "cor.pdf", sep = ""), height = 0.2*ncol(cor.matrix)+2, width = 0.2*ncol(cor.matrix)+2)
+  pheatmap(cor.matrix, main = "Correlation Matrix", color = colors.heatmap$colors, breaks = colors.heatmap$breaks)
+  while (!is.null(dev.list()))  dev.off()
+}
+
+
+plot_frequencies_and_cor <- function(dfs, group.by, ident.by, path){
+  plot.frequencies(dfs, group.by, ident.by, path)
+  cor.freqs <- cor(do.call(cbind, calc.prop.by.feature(dfs, group.by, ident.by)), method = "spearman")
+  plot.corr.matrix(cor.freqs, path)
+}
+
+plot_frequencies_and_cor_v2 <- function(dfs, group.by, ident.by, path){
+  plot.frequencies(dfs, group.by, ident.by, path)
+  cor.freqs <- cor(do.call(cbind, calc.prop.by.feature(dfs, group.by, ident.by)), method = "pearson")
+  plot.corr.matrix(cor.freqs, path)
+}
+
+
+plot_networks.of.subtypes <- function(dfs,infos.by.subtype, path, group.by, ident.by, 
+                                      bg.by = "", frame.by = "", gray.by = c("", ""), plot.community = F,
+                                      thres.edge = 0.3, thres.edge.neg = -0.3){
+  cor.freqs <- cor(do.call(cbind, unname(calc.prop.by.feature(dfs, group.by, ident.by))),
+                   method = "spearman")
+  layout.lst <- calculate.layout(cor.freqs, thres.edge, thres.edge.neg, infos.by.subtype)
+  
+  networks_graphs(cor.freqs, layout.lst, infos.by.subtype, thres.edge, thres.edge.neg, 
+                  save.fig = path,
+                  background.nodes.by = bg.by,
+                  border.color.by = frame.by,
+                  gray.nodes.by = gray.by)
+  
+  if (plot.community){
+    coms <- calculate.communities(layout.lst$network, cor.freqs, thres.edge, thres.edge.neg)
+    infos.by.subtype$community <- "out" 
+    infos.by.subtype[names(coms),"community"] <- coms
+    networks_graphs(cor.freqs, layout.lst, infos.by.subtype, thres.edge, thres.edge.neg, 
+                    plot.fig = T, save.fig = path,
+                    background.nodes.by = "community",
+                    border.color.by = frame.by,
+                    gray.nodes.by = gray.by,
+                    edge.by.weight = FALSE)
+  }
+}
+
+plot_networks.of.subtypes_v2 <- function(dfs,infos.by.subtype, path, group.by, ident.by,method, 
+                                      bg.by = "", frame.by = "", gray.by = c("", ""), plot.community = F,
+                                      thres.edge = 0.3, thres.edge.neg = -0.3){
+  cor.freqs <- cor(do.call(cbind, unname(calc.prop.by.feature(dfs, group.by, ident.by))),
+                   method = method)
+  layout.lst <- calculate.layout(cor.freqs, thres.edge, thres.edge.neg, infos.by.subtype)
+  
+  networks_graphs(cor.freqs, layout.lst, infos.by.subtype, thres.edge, thres.edge.neg, 
+                  save.fig = path,
+                  background.nodes.by = bg.by,
+                  border.color.by = frame.by,
+                  gray.nodes.by = gray.by)
+  
+  if (plot.community){
+    coms <- calculate.communities(layout.lst$network, cor.freqs, thres.edge, thres.edge.neg)
+    infos.by.subtype$community <- "out" 
+    infos.by.subtype[names(coms),"community"] <- coms
+    networks_graphs(cor.freqs, layout.lst, infos.by.subtype, thres.edge, thres.edge.neg, 
+                    plot.fig = T, save.fig = path,
+                    background.nodes.by = "community",
+                    border.color.by = frame.by,
+                    gray.nodes.by = gray.by,
+                    edge.by.weight = FALSE)
+  }
+}
+
+srt.all.list=list(srt)
+names(srt.all.list)="whole"
+
+dfs.input = list()
+
+for (i in 1:length(srt.all.list)){
+  cat("\r", i)
+  my.srt = srt.all.list[[i]]
+  df = matrix(nrow = nrow(my.srt@meta.data), ncol = 4)
+  colnames(df) = c("cell.name", "LTforUnknown_ann_finest_level", "sample","age_trio")
+  df = as.data.frame(df)
+  df[,1] = rownames(my.srt@meta.data)
+  df[,2] = my.srt$LTforUnknown_ann_finest_level
+  
+  df[,3] = my.srt$sample
+   
+  df[,4] = my.srt$age_info_60_old
+  
+
+  dfs.input[[i]] = df
+}
+
+names(dfs.input) = names(srt.all.list)
+out_dir <- paste0(out_dir, category_meta_col, '/', tag, '/')
+    if (!file.exists(out_dir)){
+        dir.create(out_dir, recursive=TRUE)
+    }
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+    Dout <- t(prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2))
+    df2 <- as.data.frame.matrix(Dout)
+
+    
+    df <- df[match(rownames(Dout), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value # pval for spearman
+
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    #out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr')
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] < 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        }
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals >= 0.05] <- 'not_sig'
+
+
+for (i in 1:length(dfs.input)){
+  cat("\r", i)
+  
+  tmp = table(dfs.input[[i]]$LTforUnknown_ann_finest_level)
+  tmp = as.data.frame(tmp)
+  tmp = cbind(tmp, rep(names(dfs.input)[i], nrow(tmp)))
+  rownames(tmp) = tmp[,1]
+  
+  colnames(tmp) = c("LTforUnknown_ann_finest_level", "n.cells", "highlevel.celltype")
+  if (i == 1) {infos = tmp} else {infos = rbind(infos, tmp)}
+}
+
+dim(infos)
+head(infos)
+cell_prop_norm_comp = data.frame(matrix(NA, nrow = length(unique(srt.all.list[[1]]$sample)), ncol = 1))
+colnames(cell_prop_norm_comp) = c("sample")
+cell_prop_norm_comp$sample = unique(srt.all.list[[1]]$sample)
+
+for (i in 1:length(srt.all.list)){
+  cat("\r", i)
+  tmp = srt.all.list[[i]]
+  print(names(srt.all.list[i]))
+  print(unique(tmp$LTforUnknown_ann_finest_level))
+ 
+  Dout <- prop.table(table(tmp$LTforUnknown_ann_finest_level, tmp$sample), 2) 
+  
+  print(dim(Dout))
+  Dout_edit = as.data.frame(as.matrix(t(Dout))) 
+  Dout_edit = as.data.frame(pivot_wider(Dout_edit, names_from = "Var2", values_from = "Freq"))
+  names(Dout_edit)[names(Dout_edit) == "Var1"] <- "sample"
+  cell_prop_norm_comp = full_join(cell_prop_norm_comp, Dout_edit, by = "sample") 
+  cell_prop_norm_comp[is.na(cell_prop_norm_comp)] <- 0
+}
+
+
+data <- cell_prop_norm_comp[,-1]
+
+dim(data)
+
+source("plot_community.R")
+
+out_df[1:4,1:4]
+res.comp=as.data.frame(out_df$directed_log_pval,out_df$names)
+
+res.comp=res.comp[ order(rownames(res.comp)) , ,drop=F]
+
+
+pallete.bg <- c("#fea3a0", "#ffba99","#fed595", "#ffe696", "#fffb97", "#eaff98", "#b3eb92","#adf4ec", "#84d5fd", "#a8c5fc", "#d5adf3", "#ffadd1", "#CCCCCC")[c(9,13,1)] ## adding gray color #CCCCCC
+
+for (i in 1:ncol(res.comp))
+{
+  cat("\r", i)
+  labeling = rep("NoCorr", nrow(infos))
+  se = which(res.comp[,i] < log10(0.05))
+  labeling[se] = "Neg"
+  se = which(res.comp[,i] > -log10(0.05))
+  labeling[se] = "Pos"
+  infos.2 = cbind(infos, labeling)
+  
+
+  size = rep(3, nrow(infos))
+  se = which(labeling %in% c("Pos", "Neg"))
+  size[se] = abs(res.comp[se,i]) * 3
+  se = which(size > 20)
+  size[se] = 20
+  
+  
+    plot_networks.of.subtypes.2(data, infos.2, paste0("output path", colnames(res.comp)[i], "._wosizechangeall"), 
+                              thres.edge = 0.3,  
+                              thres.edge.neg = -0.3,   
+                              text.size = 0.7,
+                              nodes.size = size,
+                              draw.legend = T,
+                              legend.label = sort(unique(infos.2$labeling)),
+                              bg.by = "labeling")
+
+#
