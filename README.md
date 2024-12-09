@@ -1,4 +1,4 @@
-# Normal-Lung-Aging
+# sc_Aging_clock
 This repository contains pipelines for single-cell derived aging clock and aging pipeline analysis and reproduces the main analyses in our manuscript.
 
 System Requirements:
