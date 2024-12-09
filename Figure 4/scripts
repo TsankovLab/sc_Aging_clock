@@ -10,7 +10,18 @@ library(RColorBrewer)
 library(fgsea)
 library(tidyr)
 library(dplyr)
-
+library(ComplexHeatmap)
+library(circlize)
+library(dplyr)
+library(fitdistrplus)
+library(stats)
+library(preprocessCore)
+library(Matrix)
+library(hash)
+library(data.table)
+library(rlist)
+library(scales)
+library(RColorBrewer)
 
 #Figure_4A
 
@@ -18,3 +29,629 @@ srt=get(load(file = "TNK subset of the dataset"))
 
 scrna_pipeline_dir="/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/scrna_pipeline/cmnf/"
 projdir="/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/cMNF/"
+
+srt<- NormalizeData(object = srt)
+srt <- FindVariableFeatures(srt, selection.method = "vst", nfeatures = 3000)
+srt <- ScaleData(srt)
+
+cnmf_name='no_MetaCell_HLCA_Full_hvg_TNK_downsampled_over0'
+k_list = c(5:30)
+k_selections = c(5:30)
+k_selection=30
+
+srt.copy = srt
+Idents(srt)="orig.ident" 
+
+force=FALSE
+
+nfeat = 3000
+cores= 100
+metacells = FALSE
+
+min_cells = 20 
+metacells_k = 40
+max_shared = 20
+metacells_groups = 'sample'
+
+srt$age_info_60_old <- factor(srt$age_info_60_old, levels=c("Young","Intermediate","Old"))
+
+force=F
+nfeat = 3000
+
+k_selection = 30 # specify your k selection here
+top_nmf_genes=25 # top genes to use to compute module scores from cnmf modules
+do.fgsea=TRUE # run pathway enrichments
+metacells= FALSE
+
+
+metaGroupNames = c('sample','CN','Age',"age_info_60_old","cpdb_lvl_2.5_uniform_v3")
+org = 'human'
+cnmf_spectra = read.table ( "/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/Ke_HLCA_full/cMNF/cNMF_normalized/cNMF_no_MetaCell_HLCA_Full_hvg_TNK_downsampled_over0_5_30_vf3000/cnmf/cnmf.spectra.k_30.dt_0_3.consensus.txt")
+vf = read.table ("/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/Ke_HLCA_full/cMNF/cNMF_normalized/cNMF_no_MetaCell_HLCA_Full_hvg_TNK_downsampled_over0_5_30_vf3000/vf3000.txt")[[1]]
+vf = gsub ('-','.',vf)
+if (all (vf == colnames(cnmf_spectra)))
+      {
+      vf = read.table (paste0("/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/Ke_HLCA_full/cMNF/cNMF_normalized/cNMF_no_MetaCell_HLCA_Full_hvg_TNK_downsampled_over0_5_30_vf3000/vf3000.txt"))[[1]]
+      colnames (cnmf_spectra) = vf
+      } else {
+      message ('WARNING variable features not in same order in the spectra file!')            
+      }
+
+
+cnmf_spectra = t(cnmf_spectra)
+max_spectra = apply (cnmf_spectra, 1, which.max)
+
+cnmf_spectra_nonunique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique) = paste0('CN',seq_along(cnmf_spectra_nonunique))
+
+cnmf_spectra_nonunique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique_full) = paste0('CN',seq_along(cnmf_spectra_nonunique_full))
+
+cnmf_spectra_unique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_unique) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+cnmf_spectra_unique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      rownames(tmp)
+      
+      })
+names(cnmf_spectra_unique_full) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+
+cnmf_spectra_nonunique
+
+projdir="output path"
+
+ModScoreCor2 = function (seurat_obj, geneset_list, listName, cor_threshold = NULL, pos_threshold = .1, outdir)
+        {        
+        message ('Run AddModuleScore')
+    seurat_obj = AddModuleScore (seurat_obj, geneset_list)
+        seurat_obj@meta.data = seurat_obj@meta.data[, !colnames (seurat_obj@meta.data) %in% names (geneset_list)]
+        colnames(seurat_obj@meta.data)[colnames(seurat_obj@meta.data) %in% paste0('Cluster',seq_along(geneset_list))] = names (geneset_list)
+        message (paste('Annotate cells based on highest module score and store in column:',paste0(listName, '_r',cor_threshold,'_max')))
+        if (length (geneset_list) == 1) 
+          {
+          seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = ifelse (seurat_obj@meta.data[,names (geneset_list)] > pos_threshold, 'pos','neg')
+          pdf (paste0(outdir, listName, '_modulescore_distribution_cor_threshold_',cor_threshold,'_score_',pos_threshold,'.pdf'))
+          hist (seurat_obj@meta.data[,names(geneset_list)])
+          abline (v = pos_threshold)
+          dev.off()
+          } else {
+          seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = sapply (seq_along(colnames(seurat_obj)), function(x) colnames(seurat_obj@meta.data[,names(geneset_list)])[which.max (seurat_obj@meta.data[x,names(geneset_list)])])           
+          }
+        if (!is.null(cor_threshold))
+                {
+                message ('cor_threshold provided! Filtering gene sets based on initial correlation to module score')  
+                filtered_geneset_list = list()
+                geneset_cor_list = list()
+                for (i in names(geneset_list))
+                        {       
+                        geneset_cor = cor (seurat_obj@meta.data[,i], as.matrix(t(seurat_obj@assays$RNA@data[rownames(seurat_obj@assays$RNA@data) %in% geneset_list[[i]],])))
+                        geneset_cor_list[[i]] = geneset_cor
+                        geneset_cor_names = colnames (geneset_cor)[geneset_cor > cor_threshold]
+                        geneset_cor_names = geneset_cor_names[!is.na (geneset_cor_names)]
+                        filtered_geneset_list[[i]] = geneset_cor_names
+                        }
+                if (!is.null (outdir)) 
+                        {
+                        lapply (seq_along(filtered_geneset_list), function(x) write.csv (filtered_geneset_list[[x]], paste0(outdir,'Corfiltered_Module_score_gene_list_', names(filtered_geneset_list)[x],'.csv')))
+                        pdf (paste0(outdir, listName, 'Corfiltered_modulescore_distribution.pdf'))
+                        lapply (seq_along(filtered_geneset_list), function(x) 
+                                {
+                                hist (geneset_cor_list[[x]], title = names(geneset_cor_list)[x])
+                                abline (v = cor_threshold)
+                                })
+                        dev.off()
+                        }
+                message ('Re-run AddModuleScore using corfiltered genes')
+                seurat_obj = AddModuleScore (seurat_obj, filtered_geneset_list, name = listName)
+                seurat_obj@meta.data = seurat_obj@meta.data[, !colnames (seurat_obj@meta.data) %in% paste0(names(geneset_list),'_r',cor_threshold)]
+                colnames(seurat_obj@meta.data)[colnames(seurat_obj@meta.data) %in% paste0('Cluster',seq_along(geneset_list))] = paste0(names(geneset_list),'_r',cor_threshold)
+                if (length (geneset_list) == 1) 
+                  {
+                  seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = ifelse (seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)] > pos_threshold, 'pos','neg')
+                  pdf (paste0(outdir, listName, '_modulescore_distribution_cor_threshold_',cor_threshold,'_score_',pos_threshold,'.pdf'))
+                  hist (seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)])
+                  abline (v = pos_threshold)
+                  dev.off()
+                  } else {
+                  seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = sapply (seq_along(colnames(seurat_obj)), function(x) colnames(seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)])[which.max (seurat_obj@meta.data[x,paste0(names(geneset_list),'_r',cor_threshold)])])        
+                  }
+                }
+        return (seurat_obj)
+        } 
+
+
+cnmf_spectra_nonunique
+
+message ('test AddModuleScore: top25')
+flag <- TRUE
+tryCatch(srt <- AddModuleScore(srt, features = cnmf_spectra_nonunique), error = function(e) flag <<-FALSE)
+if (!flag) {print(paste0("Skipping ",  names(obj.subtype.list[1])))}
+if (!flag) {
+  i=i+1
+} else {
+  srt = ModScoreCor2 (
+        seurat_obj = srt, 
+        geneset_list = cnmf_spectra_nonunique, 
+        cor_threshold = NULL, 
+        pos_threshold = NULL, # threshold for fetal_pval2
+        listName = 'CN', outdir = "/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/cMNF/")
+}
+
+metaGroupNames = c('sample','CN','Age',"age_info_60_old","cpdb_lvl_2.5_uniform")
+
+srt$CN = 'CN'
+ccomp_df = srt@meta.data[,c(names(cnmf_spectra_nonunique), metaGroupNames), drop=FALSE]
+
+ccomp_df$CN=NULL
+
+sample_level_df <- ccomp_df %>%
+  group_by(sample, Age) %>%
+  
+  dplyr::summarise(across(starts_with("CN"), mean, na.rm = TRUE), .groups = 'drop')
+
+
+
+cn_columns <- grep("^CN", colnames(sample_level_df), value = TRUE)
+cn_data <- sample_level_df %>% select(all_of(cn_columns))
+
+correlation_matrix <- cor(cn_data, method = "pearson")
+
+
+age_info_numeric <- as.numeric(factor(sample_level_df$Age))
+
+spearman_results <- sapply(cn_data, function(col) {
+  test <- cor.test(col, age_info_numeric, method = "spearman")
+  c(correlation = test$estimate, p.value = test$p.value)
+})
+
+
+spearman_results
+
+library(ggpubr)
+
+p_values <- spearman_results["p.value", ]
+
+p_values_fdr <- p.adjust(p_values, method = "fdr")
+
+spearman_results <- rbind(spearman_results, p.value_fdr = p_values_fdr)
+
+print(spearman_results)
+spearman_results["p.value", ]=spearman_results["p.value_fdr", ]
+print(spearman_results)
+
+spearman_results_df <- data.frame(t(spearman_results))
+colnames(spearman_results_df) <- c("correlation.rho", "p.value")
+
+
+spearman_results_df$directed_log_pval <- -log10(spearman_results_df$p.value) * sign(spearman_results_df$correlation.rho)
+spearman_results_df$names <- rownames(spearman_results_df)
+
+
+spearman_results_df$direction <- ifelse(spearman_results_df$correlation.rho > 0, "Positive", 
+                                        ifelse(spearman_results_df$correlation.rho < 0, "Negative", "Neutral"))
+
+out_df <- spearman_results_df[, c("names", "directed_log_pval", "direction")]
+
+out_df$direction[abs(out_df$directed_log_pval) < 1.3] <- 'not_sig'
+
+figs <- list()
+
+m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+                color = "direction",                             # Color by groups
+                palette = c("#00AFBB","#D3D3D3", "#FC4E07"),    # Custom color palette
+                sorting = "descending",                         # Sort value in descending order
+                add = "segments",                               # Add segments from y = 0 to dots
+                add.params = list(color = "lightgray", size = 2), # Change segment color and size
+                title = paste0('spearman regression composition analysis'),
+                dot.size = 8,                                   # Large dot size
+                font.label = list(color = "white", size = 8, vjust = 0.5), # Adjust label parameters
+                ggtheme = theme_pubr()                          # ggplot2 theme
+) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+
+figs[[1]] <- m
+
+pdf(file=paste0(projdir,"HLCA_full_composition_lollipop_test_fdr_adjusted.pdf"),height=6,width=7 )
+
+print(figs[[1]])
+
+dev.off()
+
+SimpleGeneNetworkPlot_color <- function(
+  gene_list,           # A vector of gene names, ranked
+  n_inner = 10,        # Number of genes to consider as 'inner' (central) nodes
+  outdir = "output path",
+  plot_size = c(3,3),
+  edge.width = 0.1,
+  vertex.label.cex = 0.5,
+  vertex.size = 6,
+  vertex.color = "DodgerBlue",  
+  repel = FALSE,      
+  font.size = 6,
+  letter="M",      
+  ...
+){
+
+  name = names(gene_list)
+  gene_list = gene_list[[1]]
+  
+  
+
+  cat(paste0("Writing output files to ", "/", outdir, name, "\n"))
+  
+ 
+  n_inner <- min(n_inner, length(gene_list))
+  
+  nodes.a <- data.frame(name = gene_list[1:n_inner])
+  edges.a <- data.frame(from = head(gene_list[1:n_inner], -1), to = tail(gene_list[1:n_inner], -1))
+  
+  nodes.b <- data.frame(name = gene_list[(n_inner + 1):length(gene_list)])
+  edges.b <- data.frame(from = head(gene_list[(n_inner + 1):length(gene_list)], -1), to = tail(gene_list[(n_inner + 1):length(gene_list)], -1))
+  
+  # Create graph
+  gA <- igraph::graph_from_data_frame(d = edges.a, vertices = nodes.a, directed = FALSE)
+  gB <- igraph::graph_from_data_frame(d = edges.b, vertices = nodes.b, directed = FALSE)
+  g <- gA + gB
+
+  layoutCircle <- rbind(igraph::layout.circle(gA)/2, igraph::layout.circle(gB))
+  
+  pdf(paste0(outdir, '/', name, '.pdf'), width = plot_size[1]/2, height = plot_size[2]/2, useDingbats = FALSE)
+  par(mar = c(1,1, 1, 1))
+  if(repel){
+  
+    ggraph::ggraph(g, layout = layoutCircle) +
+      ggraph::geom_edge_link(aes(width = edge.width), color = "grey") +
+      ggraph::geom_node_point(color = vertex.color, size = vertex.size) +
+      ggraph::geom_node_text(ggrepel::geom_text_repel(aes(label = V(g)$name), size = font.size, family = 'Helvetica', fontface = 3, segment.size = 0.2)) +
+      theme_void()
+  } else {
+    plot(g,
+         layout = layoutCircle,
+         edge.curved = 0,
+         edge.arrow.size = 0.5,
+         edge.width = edge.width,
+         vertex.label = as.character(gene_list),
+         vertex.label.dist = 1.1,
+         vertex.label.degree = -pi/4,
+         vertex.label.color = "black",
+         vertex.label.family = 'Helvetica',
+         vertex.label.font = 6,
+         vertex.label.cex = 0.5,  # Adjusted to be proportional to the desired font size
+         vertex.size = vertex.size,
+         vertex.color = vertex.color,
+         main = ""  # Suppress the title here
+    )
+    
+    
+    title(main = paste0(letter,name), cex.main = 0.5, font.main = 1)  # `cex.main = 0.6` for size, `font.main = 1` for no bold
+  }
+  
+  dev.off()
+}
+
+
+for (aa in 1:length(cnmf_spectra_nonunique_full)){
+       
+       CN_module=cnmf_spectra_nonunique[aa]
+       SimpleGeneNetworkPlot_color(CN_module,plot_size = c(3.8,3.8))
+}
+
+#Figure_4B,C&E
+
+
+hlca=srt
+hlca$age_trio <- 'unknown'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=0.0, to=39.5, by=0.5))] <- 'young'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=40.0, to=59.5, by=0.5))] <- 'intermediate'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=60.0, to=150.0, by=0.5))] <- 'old'
+table(hlca$age_trio)
+
+h=hash()
+#Choose the module
+#h[["Tm12"]]=list(c('DNAJB1','HSP90AA1','HSPE1','HSPH1','HSPB1','HSPA8','NR4A1','ZFAND2A','HSPD1','JUN','PPP1R15A','DNAJA1','HSP90AB1','HSPA6','DUSP1','BAG3','UBB','CACYBP','RHOB','GADD45B','NEU1','DNAJB4','BTG2','ATF3','FOSB'))
+#tag = "Tm12Fig4b"
+#h[["Tm7"]]=list(c('CCL3','CCL4','XCL2','NR4A2','CCL4L2','DUSP2','IRF8','IFNG','XCL1','ID2','CD160','NFKBID','EGR2','TRDC','MAFF','SLA','KLRD1','CHMP1B','AMD1','GZMB','CMC1','UBB','PMAIP1','SDCBP','HOPX'))
+#tag = "Tm7fig4C"
+
+h[["Tm8"]]=list(c('CD8A','CD8B','CCL5','LIMD2','GZMH','GZMA','IL32','SH3BGRL3','GIMAP4','GZMK','CD3E','PSMB10','PFN1','CORO1A','CD52','IFITM1','CNN2','HCST','NKG7','COTL1','CD3D','UBE2V1','ATP5MC2','UCP2','ACTB'))
+tag = "Tm8fig4C"
+head(hlca)
+output_path <-"/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/"
+
+hlca.celltype=unique(hlca$orig.ident)
+
+number=length(h)
+srt = hlca
+for (j in 1:length(hlca.celltype)){
+     
+      hlca1 <- subset(x = hlca, subset = age_trio %in% c('young', 'intermediate', 'old') & orig.ident == hlca.celltype[j]); tag <- paste0("HLCA_marker_orig.ident_selected_KX_.",hlca.celltype[j])
+   
+    obj <- hlca1; split<-"sample"
+    plots <- list()
+    x <- 0
+    for (i in hash::keys(h)){
+        print(i)
+        name = i
+        flag <- TRUE
+        tryCatch(srt <- AddModuleScore(obj, features = h[[i]], name = name), error = function(e) flag <<-FALSE)
+        if (!flag) {print(paste0("Skipping ", name))}
+        if (!flag) next
+        obj.list <- SplitObject(srt, split.by = split)
+        x <- x + 1
+        module_scores_list <- list()
+        Age_status_list <- list()
+        # this is median
+        for (i in 1:length(obj.list)) {
+            obj2 <- obj.list[[i]]
+            median_module_score <- median(obj2@meta.data[,paste0(name, "1")])
+            Age <- obj2@meta.data[,'age_trio']
+            module_scores_list[i] <- median_module_score
+            Age_status_list[i] <- Age
+        }    
+        module_scores_vec <- as.vector(module_scores_list)
+        Age_status_vec <- as.vector(Age_status_list)
+        names(module_scores_vec) <- names(obj.list)
+        names(Age_status_vec) <- names(obj.list)
+        module_scores_df <- as.data.frame(module_scores_vec) # patients (rows) vs module score (cols)
+        Age_status_df <- as.data.frame(Age_status_vec)
+        merged_df <- rbind(module_scores_df, Age_status_df)
+        merged_df <- t(merged_df)
+        colnames(merged_df) <- c(name, "Age")
+        module_scores_mtx <- as.matrix(merged_df)
+        module_scores_mtx <- as.data.frame(module_scores_mtx)
+
+        if (split == 'SSample'){
+            levels <- c('young', 'old')
+            palette <- c("#0091CA", "#D8423D")
+        } else {
+            levels <- c('young', 'intermediate', 'old')
+            palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+        }
+
+       
+        module_scores_mtx$Age <- factor(module_scores_mtx$Age, levels=levels)
+        module_scores_mtx <- module_scores_mtx[order(module_scores_mtx$Age),]
+
+        module_scores_mtx[, name] <- as.numeric(module_scores_mtx[, name])
+
+
+        my_comparisons <- combn(levels, 2, simplify = FALSE)
+
+        if (split == 'SSample'){
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        } else {
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    # label="Sample",
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (7.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        }
+
+        plots[[x]] <- plot
+
+    }
+
+    
+    while (!is.null(dev.list())) dev.off()
+    pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_median_wFDR.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+   
+    print(cowplot::plot_grid(plotlist = plots, ncol = 5*1/5*number, nrow= 6*1/6*1))
+    dev.off()
+
+        obj <- hlca1; split<-"sample"
+    plots <- list()
+    x <- 0
+    for (i in hash::keys(h)){
+        print(i)
+        name = i
+        flag <- TRUE
+        tryCatch(srt <- AddModuleScore(obj, features = h[[i]], name = name), error = function(e) flag <<-FALSE)
+        if (!flag) {print(paste0("Skipping ", name))}
+        if (!flag) next
+        obj.list <- SplitObject(srt, split.by = split)
+        x <- x + 1
+        module_scores_list <- list()
+        Age_status_list <- list()
+      
+        for (i in 1:length(obj.list)) {
+            obj2 <- obj.list[[i]]
+            median_module_score <- mean(obj2@meta.data[,paste0(name, "1")])
+            Age <- obj2@meta.data[,'age_trio']
+            module_scores_list[i] <- median_module_score
+            Age_status_list[i] <- Age
+        }        
+        module_scores_vec <- as.vector(module_scores_list)
+        Age_status_vec <- as.vector(Age_status_list)
+        names(module_scores_vec) <- names(obj.list)
+        names(Age_status_vec) <- names(obj.list)
+        module_scores_df <- as.data.frame(module_scores_vec) # patients (rows) vs module score (cols)
+        Age_status_df <- as.data.frame(Age_status_vec)
+        merged_df <- rbind(module_scores_df, Age_status_df)
+        merged_df <- t(merged_df)
+        colnames(merged_df) <- c(name, "Age")
+        module_scores_mtx <- as.matrix(merged_df)
+        module_scores_mtx <- as.data.frame(module_scores_mtx)
+
+        if (split == 'SSample'){
+            levels <- c('young', 'old')
+            palette <- c("#0091CA", "#D8423D")
+        } else {
+            levels <- c('young', 'intermediate', 'old')
+            palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+        }
+
+        module_scores_mtx$Age <- factor(module_scores_mtx$Age, levels=levels)
+        module_scores_mtx <- module_scores_mtx[order(module_scores_mtx$Age),]
+
+        module_scores_mtx[, name] <- as.numeric(module_scores_mtx[, name])
+
+
+        my_comparisons <- combn(levels, 2, simplify = FALSE)
+
+        if (split == 'SSample'){
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                              
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        } else {
+            plot <- ggviolin(module_scores_mtx, x = "Age", y = name, color = "Age",
+                                    palette = palette, add = "jitter",
+                                    
+                                    title = paste0(name, " with Age")) + 
+                                    stat_compare_means(comparisons = my_comparisons,p.adjust.method="fdr", label.y = c(max(as.numeric(module_scores_mtx[,name])) * (7.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (8.0 / 10), max(as.numeric(module_scores_mtx[,name])) * (9.0 / 10))) +
+            theme(plot.title = element_text(size = 12, face = "bold")) + theme(legend.position = "none")
+        }
+
+        plots[[x]] <- plot
+
+    }
+
+    
+    while (!is.null(dev.list())) dev.off()
+    pdf(paste0(output_path, tag, "_module_score_analyses_with_age60_old_vlolinplot_withID_mean_wFDR.pdf"), width = 16*1*1/5*number, height = 9*3/6*7/7, useDingbats=FALSE)
+    print(cowplot::plot_grid(plotlist = plots, ncol = 5*1/5*number, nrow= 6*1/6*1))
+    dev.off()
+
+}
+
+#Figure_4F
+
+
+df1 <- get(load(file = "/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/Ke_HLCA_full/cpdb_lvl3_v3_QC/Plots_v4/Plots_1k_55_old/lig_rec_differential_HLCA_old_young_1k.Rda"))
+df1$old_num_signif=as.numeric(df1$old_num_signif)
+df1$young_num_signif=as.numeric(df1$young_num_signif)
+df1$old_young_prop_diff=as.numeric(df1$old_young_prop_diff)
+df1$old_young_neglogpval_fishertest=as.numeric(df1$old_young_neglogpval_fishertest)
+df1$signif <- 0
+df1$signif[df1$old_young_neglogpval_fishertest >= 1.3] <- 1
+df1$signif <- factor(df1$signif, levels = c(0,1))
+
+str(df1)
+range <- max(abs(df1$old_young_prop_diff))
+
+colors <- c(brewer_pal(palette = "Spectral", direction = -1)(7))
+pal <- gradient_n_pal(colors)
+custom_color_scale <- scale_fill_gradientn(
+  colours = pal(c(0, rescale(seq_along(df1$old_young_prop_diff)), 1)), 
+  # limits = c(0, 6), breaks = 0:6,
+  values = c(0,rescale(seq_along(df1$old_young_prop_diff)),1), 
+  limits = c(-range,range),
+  name="Prop_Diff_Scale"
+)
+
+ints=df1$int_name[df1$old_young_neglogpval_fishertest >= 1.3] 
+
+df2 <- df1[df1$int_name %in% ints,] 
+
+row.names(df1)
+
+df1$int_name_CellPairUnique <- row.names(df1)
+colnames(df1)
+df1$int_name_CellPairUnique
+
+ints_cellpair_interaction=df1$int_name_CellPairUnique[df1$old_young_neglogpval_fishertest >= 1.3] 
+
+df3 <- df1[df1$int_name_CellPairUnique %in% ints_cellpair_interaction,]
+dim(df3)
+head(df3)
+
+Chemokine=c("ICAM1","ANXA","CD40")
+
+Chemokine_name=paste(Chemokine,collapse="_")
+
+Compartment=c("Macrophages","Monocytes","DC","CD4T","CD8T","NK")
+
+Compartment_name <- paste(Compartment, collapse="_")
+
+filtered_df <- df3[sapply(df3$interacting_pair, function(pair) any(sapply(Chemokine, function(chemo) grepl(chemo, pair)))), ]
+filtered_df <- filtered_df[sapply(filtered_df$cell.pair, function(pair) any(sapply(Compartment, function(chemo) grepl(chemo, pair)))), ]
+
+isDesiredPair <- function(pair) {
+    
+    cells <- unlist(strsplit(pair, split = "\\."))
+
+    all(cells %in% Compartment)
+}
+                                                                                   
+df1$int_name_CellPairUnique <- row.names(df1)
+colnames(df1)
+df1$int_name_CellPairUnique
+ints_cellpair_interaction=df1$int_name_CellPairUnique[df1$old_young_neglogpval_fishertest >= 1.0] 
+
+df4 <- df1[df1$int_name_CellPairUnique %in% ints_cellpair_interaction,]
+dim(df4)
+head(df4)
+
+filtered_df_v3 <- df3[df3$gene_a %in% Chemokine | df3$gene_b %in% Chemokine, ]
+
+filtered_df_v3 <- df3[sapply(df3$interacting_pair, function(pair) any(sapply(Chemokine, function(chemo) grepl(chemo, pair)))), ]
+
+filtered_df_v3 <- filtered_df_v3[sapply(filtered_df_v3$cell.pair, function(pair) any(sapply(Compartment, function(chemo) grepl(chemo, pair)))), ]
+ 
+filtered_df_v3 <- filtered_df_v3[sapply(filtered_df_v3$cell.pair, isDesiredPair), ]
+
+#filtered_df_v3
+
+filtered_df_v3 <- filtered_df_v3 %>%
+  arrange(desc(grepl(c("Macrophages","Monocytes","DC","CD4T","CD8T","NK"), cell.pair)))
+
+dim(filtered_df_v3)
+
+print(filtered_df_v3$cell.pair)
+
+filtered_df_v3$cell.pair <- factor(filtered_df_v3$cell.pair, levels = unique(filtered_df_v3$cell.pair))
+                                                                             
+filtered_df_v3
+pdf(file = paste0(figures.dir, "dotplot_lig_rec_differential_hlca_old_young_1k_v2_",Chemokine_name,"_signal",Compartment_name,"_filtered_paper_version_over1.0.pdf"), useDingbats = F, 
+  height = min(5,log((length(unique(filtered_df_v3$cell.pair))))), 
+  width = 7)
+p<-ggplot(data = filtered_df_v3, mapping = aes(x=cell.pair, y=interacting_pair, color=old_young_prop_diff, size=old_young_neglogpval_fishertest))+geom_point(shape = 21, aes(colour = as.factor(signif), fill = old_young_prop_diff))+
+  scale_colour_manual(values=c("00FFFFFF","black")) +labs(size="NegLogPval", colour="is_Prop_Diff") +
+  theme_minimal() +
+  scale_size(range = c(0.25, 3.5))+
+  custom_color_scale +
+  theme(text = element_text(size=6), strip.text = element_text(size=6,face='bold'))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+    axis.text.y = element_text (angle = 0, vjust = 0.5, hjust=1,margin=margin(t=0,r=2,b=0,l=-4,unit='pt')),
+    plot.margin=grid::unit(c(2/1,2/1,2/1,3/1), "mm"),
+    legend.key.size = unit(6, 'pt'),
+    legend.key.width = unit(6, 'pt'),
+    legend.title=element_text(size=6),
+            
+    legend.box.margin = margin(t=0,r=0,b=-0,l=-10),
+    legend.text = element_text(size=6,hjust=-0.,margin=margin(t=-0,r=-0,b=-0,l=-0,unit='pt')),
+    axis.title.y=element_text(size=6,vjust = 3,margin=margin(t=0,r=0,b=-0,l=0,unit='pt')),
+    axis.title.x=element_text(size=6,vjust=3,margin=margin(t=-0,r=-0,b=0,l=0,unit='pt')),
+    panel.grid.major = element_line(size=0.1,colour="black",linetype="dashed")
+ 
+    )
+ 
+p
+dev.off()
