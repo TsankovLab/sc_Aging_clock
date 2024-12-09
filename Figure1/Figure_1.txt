@@ -718,6 +718,225 @@ dir.create(projDir)
     dev.off()
 
 
+#Figure_1E
+
+
+table(srt$cpdb_lvl_2.5_uniform_v2)
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+refined_label_meta <- 'cpdb_lvl_2.5_uniform_v3'
+sampleID_meta <- 'sample'
+gene_name = c()
+
+gene_name=c("CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK2", "CCNA2", "MAPK14", "ATM", "TP53", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "RB1", "RELA", "SIRT1", "CDK4", "CDK6", "CDKN1B", 
+  "IGFBP7", "MIF", "SERPINE1", "TERT", "E2F1", "STAT3", "NBN", "FOS", "PTEN", "NFKB1", "CEBPB","PML", "TERF2", "FOXM1", "MAPK9", "MAPK3", "MAP3K5", "LMNB1", "BMI1", "MDM2", "SIRT6", 
+  "MAP2K3", "MAP2K6", "MAPK1")
+ 
+
+gene_name_2=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+
+names(gene_name)="Lee_Optimized_woCellMarker"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="Ji_Lee_Union_SASP"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="Ji_Lee_Union_SASP"
+
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+obj <- AddModuleScore(object = obj, features = gene_list, name = names(gene_list))
+
+if(length(gene_list[[1]])>1){
+   module_scores <- obj@meta.data[,paste0(names(gene_list),"1")] 
+   aggregate_data <- aggregate(module_scores, 
+    by = list(cell_type = obj@meta.data[, refined_label_meta],
+    sample = obj@meta.data[, sampleID_meta]), 
+    FUN = median)
+   } else{
+    module_scores <- obj@assays$RNA@data[names(gene_list), ]
+aggregate_data2=AverageExpression(obj,group.by = c(sampleID_meta,refined_label_meta),layer="data")
+expr_matrix <- aggregate_data2$RNA
+column_names <- colnames(expr_matrix)
+cleaned_column_names <- sub("data\\[.*,\\s.*\\]:", "", column_names)
+
+mki67_data <- expr_matrix[names(gene_list), ]
+
+split_names <- do.call(rbind, strsplit(cleaned_column_names, "_(?!.*_)", perl = TRUE))
+
+
+samples <- split_names[, 1]  
+cell_types <- split_names[, 2]  
+
+
+aggregate_dataX <- data.frame(
+  cell_type = cell_types,
+  sample = samples,
+  x = as.numeric(mki67_data)
+)
+
+aggregate_dataX <- aggregate_dataX[order(aggregate_dataX$sample), ]
+
+rownames(aggregate_dataX)=NULL
+aggregate_dataX$x=log1p(aggregate_dataX$x)
+
+aggregate_data=aggregate_dataX
+
+   }
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    #out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr') #editable
+
+    # Convert NA in p_vals to 1
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    # Convert NA in gradients to 0
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+    png(paste0(out_dir, category_meta_col, '_', tag, "Senescence_expression_lollipop_test_woFDRall.png"), height = 800, width = 800)
+    print(figs)
+    dev.off()
+
+    pdf(paste0(out_dir, category_meta_col, '_', tag, "Senescence_expression_lollipop_test_woFDRall.pdf"), height = 6, width = 8)
+    print(figs)
+    dev.off()
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "Senescence_subtype_expression_regression_model_output_woFDRall.csv"), row.names = FALSE)
+}
+obj = srt
+category_meta_col='Age'
+tag = "lollipop"
+file_path <- paste0(out_dir, category_meta_col, "_", tag, "Senescence_subtype_expression_regression_model_output_woFDRall.csv")
+print(file_path)
+
+expression_regression_model(obj=srt, category_meta_col='Age', tag= "lollipop", out_dir = "output path")
+
+
 
 #Figure_1F
 
