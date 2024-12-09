@@ -1,1 +1,20 @@
+rm(list=ls())
+library(Seurat)
+library(patchwork)
+library(tidyverse)
+library(harmony)
+library(viridis)
+library(ggpubr)
+library(ggplot2)
+library(RColorBrewer)
+library(fgsea)
+library(tidyr)
+library(dplyr)
 
+
+#Figure_4A
+
+srt=get(load(file = "TNK subset of the dataset"))
+
+scrna_pipeline_dir="/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/scrna_pipeline/cmnf/"
+projdir="/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/cMNF/"
