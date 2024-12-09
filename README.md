@@ -7,17 +7,16 @@ Operating System: Tested on RedHat 7.7 x86_64.
 R Version: 4.1.0
 
 Installing the conda environment:
-'''
+```
 conda env create --file=AgingClock.yml
 conda activate AgingClock
-'''
+```
 
 Please find the required file for installation in the main repository named "AgingClock.yml".
 
-
 ### PBMCs
 
-'''
+```
 
 library(Seurat)
 library(scRepertoire)
@@ -33,10 +32,12 @@ options(Seurat.object.assay.version = 'v3')
 
 directory_path <- "./tcrs/"
 
+# csv file with files
 csv_files <- list.files(directory_path, pattern="\\.csv$", full.names=TRUE)
 
 csv_data_list <- list()
 
+# modify barcodes
 for(file_path in csv_files) {
       file_name <- basename(file_path)
       parts <- strsplit(file_name, "AS")[[1]]
@@ -61,6 +62,8 @@ for(file_path in csv_files) {
 
 contig_list <- lapply(csv_data_list, function(df) loadContigs(df, format = "10X"))
 combined3 <- combineTCR(removeMulti = TRUE, removeNA = TRUE, contig_list)
+#--- apply the names to the list
+
 tcrL_tumor = lapply (csv_files, function(x) read.csv(x))
 names (combined2) = c(sorted_identifiers)
 
@@ -77,4 +80,4 @@ sce@meta.data$Age_group3 <- cut(
   labels = c("Young", "Intermediate", "Old"),
   right = FALSE # intervals are of the form [a, b), which includes a but not b
 )
-'''
+```
