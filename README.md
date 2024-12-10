@@ -16,11 +16,12 @@ Please find the required file for installation in the main repository named "Agi
 
 ## Dataset  
 
+ 
+
+
+### Bulk data      
 Here is the link to download the bulk dataset:  
-[bulk_tissue_expression](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression)  
-
-
-### Bulk data  
+[GTEX data](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression) 
 
 ```
 
@@ -235,7 +236,10 @@ fwrite(x = data_to_write_out2, row.names=TRUE, file=paste0(proj.dir,"GTex_lung_e
 
 
 
-### PBMCs
+### PBMCs  
+
+Here is the link to download the PBMC data:  
+[PBMC data](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression)     
 
 ```
 
