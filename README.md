@@ -14,9 +14,28 @@ conda activate AgingClock
 
 Please find the required file for installation in the main repository named "AgingClock.yaml".
 
+## Dataset  
+
+Here is the link to download the bulk dataset:  
+[bulk_tissue_expression](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression)  
+
+
 ### Bulk data  
 
 ```
+
+rm(list=ls())
+options(stringsAsFactors = F)
+# load libraries
+library(ggplot2)
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(ggpubr)
+library(hash)
+library(data.table)
+library(hashmap)
+library(string)
 
 
 projDir="data path"
@@ -208,6 +227,8 @@ meta=as.data.frame(as.matrix(bulk@meta.data))
 library(data.table)
 data_to_write_out <- as.data.frame(as.matrix(bulk@assays$RNA@counts))
 fwrite(x = data_to_write_out2, row.names=TRUE, file=paste0(proj.dir,"GTex_lung_expression.csv"))
+
+```
 
 
 
