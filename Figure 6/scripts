@@ -1,7 +1,20 @@
 rm(list = ls())
 library(pheatmap)
 library(dplyr)
-
+library(harmony)
+library(viridis)
+library(ggpubr)
+library(ggplot2)
+library(RColorBrewer)
+library(fgsea)
+library(tidyr)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(tidyverse)
+library(proxy)
+library(ComplexHeatmap)
+library(circlize)
 
 #Figure_6A
 
@@ -341,4 +354,373 @@ for (i in 1:ncol(res.comp))
                               legend.label = sort(unique(infos.2$labeling)),
                               bg.by = "labeling")
 }
-#
+
+
+#Figure_6B
+
+srt=get(load(file="whole dataset path"))
+
+table(srt$cpdb_lvl_2.5_uniform_v2)
+  
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+srt$cpdb_lvl_2.5_uniform_v4=srt$cpdb_lvl_2.5_uniform_v3
+srt$cpdb_lvl_2.5_uniform_v4[srt$cpdb_lvl_2.5_uniform_v2 == "CD4T"] <- 'T-total'
+srt$cpdb_lvl_2.5_uniform_v4[srt$cpdb_lvl_2.5_uniform_v2 == "CD8T"] <- 'T-total'
+table(srt$cpdb_lvl_2.5_uniform_v4)
+
+obj=srt
+
+Idents(obj)="cpdb_lvl_2.5_uniform_v4"
+
+obj.subtype.list <- SplitObject(obj, split.by = "cpdb_lvl_2.5_uniform_v4")
+
+df_list <- list()
+
+for (i in 1:length(obj.subtype.list)) {
+
+subtype <- obj.subtype.list[[i]]
+print(names(obj.subtype.list[i]))
+print(ncol(subtype))
+srt=subtype
+
+#### Run cNMF ####
+force=FALSE
+k_list = c(5:30)
+k_selections = c(5:30)
+nfeat = 3000
+cores= 100
+metacells = FALSE
+min_cells = 20 # default 100
+
+metacells_k = 40
+max_shared = 20
+metacells_groups = 'sample'
+
+has_space <- grepl(" ", names(obj.subtype.list[i]))
+if (has_space) {
+  string <- gsub(" ", "_", names(obj.subtype.list[i]))
+}else{
+     string=names(obj.subtype.list[i])
+}
+
+if(ncol(subtype)>=15000){
+       cnmf_name=paste0("no_MetaCell_HLCA_Full_hvg_",string,"_downsampled")}
+if(ncol(subtype)<15000){
+       cnmf_name=paste0("no_MetaCell_HLCA_Full_hvg_",string)}
+
+srt$age_info_60_old <- factor(srt$age_info_60_old, levels=c("Young","Intermediate","Old"))
+
+force=F
+nfeat = 3000
+k_list = c(5:30)
+k_selection = 30
+top_nmf_genes=25 # top genes to use to compute module scores from cnmf modules
+do.fgsea=TRUE # run pathway enrichments
+metacells= FALSE
+    
+
+metaGroupNames = c('sample','CN','Age',"age_info_60_old","cpdb_lvl_2.5_uniform_v4")
+org = 'human'
+    
+source("/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/Ke_HLCA/Atlas_Scripts_Isha/useful_functions.R")
+
+reductionName="umap"
+
+if (!exists('cnmf_name')) cnmf_name = ''
+cnmf_out = paste0('cNMF_normalized/cNMF_',cnmf_name,'_',paste0(k_list[1],'_',k_list[length(k_list)]),'_vf',nfeat)
+dir.create (projdir, recursive=T)
+    
+cnmf_spectra = read.table (paste0(cnmf_out,'/cnmf/cnmf.spectra.k_',k_selection,'.dt_0_3.consensus.txt'))
+
+vf = read.table (paste0(projdir,cnmf_out,'/vf',nfeat,'.txt'))[[1]]
+vf = gsub ('-','.',vf)
+if (all (vf == colnames(cnmf_spectra)))
+      {
+      vf = read.table (paste0(projdir,cnmf_out,'/vf',nfeat,'.txt'))[[1]]
+      colnames (cnmf_spectra) = vf
+      } else {
+      message ('WARNING variable features not in same order in the spectra file!')            
+      }
+
+cnmf_spectra = t(cnmf_spectra)
+max_spectra = apply (cnmf_spectra, 1, which.max)
+
+cnmf_spectra_nonunique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique) = paste0('CN',seq_along(cnmf_spectra_nonunique))
+
+cnmf_spectra_nonunique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique_full) = paste0('CN',seq_along(cnmf_spectra_nonunique_full))
+
+cnmf_spectra_unique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_unique) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+cnmf_spectra_unique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      rownames(tmp)
+      
+      })
+names(cnmf_spectra_unique_full) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+
+cnmf_spectra_nonunique
+
+
+  for (cn in names(cnmf_spectra_nonunique)) {
+    
+  
+    df <- data.frame(Gene = cnmf_spectra_nonunique[[cn]])
+    
+    
+    colnames(df) <- paste(names(obj.subtype.list[i]), cn, sep = "_")
+    
+    
+    df_list[[paste(names(obj.subtype.list[i]), cn, sep = "_")]] <- df
+  }
+
+}
+final_df <- bind_cols(df_list)
+final_df$CD8T_CN14
+final_df$Macrophages_CN14
+dim(final_df)
+
+filtered_final_df <- final_df[!grepl("HSC|PNEC|Tuft|Ionocyte|pDCs|Hillock-like|Goblet|Mesothelium", names(final_df), ignore.case = TRUE)]
+
+dim(filtered_final_df)
+final_df.copy=final_df
+final_df=filtered_final_df
+
+jaccard_index <- function(x, y) {
+  length(intersect(x, y)) / length(union(x, y))
+}
+
+
+index_matrix <- matrix(0, nrow = length(final_df), ncol = length(final_df))
+rownames(index_matrix) <- names(final_df)
+colnames(index_matrix) <- names(final_df)
+
+for (i in seq_along(final_df)) {
+  for (j in seq_along(final_df)) {
+    index_matrix[i, j] <- jaccard_index(final_df[[i]], final_df[[j]])
+  }
+}
+
+dim(index_matrix)
+row_subset <- apply(index_matrix, 1, function(row) any(row > 0.2))
+col_subset <- apply(index_matrix, 2, function(col) any(col > 0.2))
+subset_matrix <- index_matrix[row_subset, col_subset]
+
+
+
+non_identical_rows <- apply(index_matrix, 1, function(row) any(row != 1))
+non_identical_cols <- apply(index_matrix, 2, function(col) any(col != 1))
+
+
+filtered_matrix <- index_matrix[non_identical_rows, non_identical_cols]
+
+
+row_subset <- apply(filtered_matrix, 1, function(row) any(row >= 0.3 & row != 1))
+
+col_subset <- apply(filtered_matrix, 2, function(col) any(col >= 0.3 & col != 1))
+
+
+subset_matrix <- filtered_matrix[row_subset, col_subset]
+
+dim(subset_matrix)
+method="spearman"
+
+all_results=read.csv ("data path ... HLCA_Full_module_spearman_ranking_all_celltypes_top25_wFDR.csv")
+
+Signif_results <- all_results[all_results$p_value <= 0.05, ]
+dim(Signif_results)
+Signif=c(unique(Signif_results$celltype_CN))
+sort(Signif)
+
+Signif<- sub("_CN([0-9]+)$", ".\\1", Signif)
+rows_to_keep_signif <- (rownames(filtered_matrix) %in% Signif)
+sum(rows_to_keep_signif)
+
+columns_to_keep_signif <- (colnames(filtered_matrix) %in% Signif)
+sum(columns_to_keep_signif)
+
+filtered_matrix <- filtered_matrix[rows_to_keep_signif, columns_to_keep_signif, drop = FALSE]
+
+dim(filtered_matrix)
+
+print(subset_matrix)
+
+DBTS=c( "Club_CN16","Club_CN24","Multiciliated_CN24","Club_CN9","Multiciliated_CN17","Secretory_CN15","Macrophages_CN29","Monocyte_CN25","DC_CN18", "Monocytes_CN17", "NK_CN21", "B_CN13", "LymphaticEC_CN15", "AT1_CN20", "Multiciliated_CN23", "Secretory_CN28", "AT2_CN30", "SmoothMuscle_CN27", "Bloodvessels_CN29", "Macrophages_CN22", "Basal_CN29", "Pericytes_CN25", "SmoothMuscle_CN22", "Fibroblasts_CN23", "Mast_CN19", "Bloodvessels_CN19", "LymphaticEC_CN24", "AT1_CN24", "AT2_CN20", "Mesothelium_CN9", "B_CN14", "Plasma_CN22", "Bloodvessels_CN24", "LymphaticEC_CN26", "Fibroblasts_CN25", "DC_CN30", "Macrophages_CN27", "Plasma_CN11", "Mesothelium_CN7")
+
+DBTS<- sub("_CN([0-9]+)$", ".\\1", DBTS)
+all_results1=all_results
+rownames(subset_matrix)<- sub("_CN([0-9]+)$", ".\\1", rownames(subset_matrix))
+colnames(subset_matrix)<- sub("_CN([0-9]+)$", ".\\1", colnames(subset_matrix))
+colnames(subset_matrix)
+dim(subset_matrix)
+
+rows_to_keep <- !(rownames(subset_matrix) %in% DBTS)
+
+columns_to_keep <- !(colnames(subset_matrix) %in% DBTS)
+
+filtered_matrix <- subset_matrix[rows_to_keep, columns_to_keep, drop = FALSE]
+
+
+Signif<- sub("_CN([0-9]+)$", ".\\1", Signif)
+rows_to_keep_signif <- (rownames(filtered_matrix) %in% Signif)
+sum(rows_to_keep_signif)
+
+columns_to_keep_signif <- (colnames(filtered_matrix) %in% Signif)
+sum(columns_to_keep_signif)
+
+filtered_matrix <- filtered_matrix[rows_to_keep_signif, columns_to_keep_signif, drop = FALSE]
+
+dim(filtered_matrix)
+
+print(subset_matrix)
+
+value_range <- c(0.05,0.2, 0.25, 0.3, 0.4,0.6,1)
+
+color_palette <- rev(paletteer::paletteer_d("rcartocolor::ag_Sunset"))
+
+colors <- c("white", color_palette)
+col_fun <- colorRamp2(c(0,value_range), colors)
+
+colors <- c( color_palette)
+col_fun <- colorRamp2(c(value_range), colors)
+mtx=Heatmap(subset_matrix, 
+        name = "Jaccard Index", 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        # row_title = "CD4 Modules",
+        row_title = "CNMF Modules",
+        column_title = "CNMF Modules",
+        cluster_rows = TRUE,
+        cluster_columns = TRUE,
+        show_row_names = TRUE,
+        show_column_names = TRUE,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+            if(subset_matrix[i, j] > 0.2) {
+                grid.text(sprintf("%.2f", subset_matrix[i, j]), x, y, gp = gpar(fontsize = 10))
+            }
+        })
+
+
+    pdf(file = file.path(figures.dir,  
+                        
+                         paste("Jaccard_Distance_analysis_HLCA_all_vs_all_lung_nonunique", "pdf", sep = ".")),
+        width = 30,
+        height = 30)
+  
+    dev.off()
+
+
+
+unique_labels <- rownames(filtered_matrix)
+
+label_colors <- rep("black", length(unique_labels)) 
+names(label_colors) <- unique_labels
+
+
+row_colors <- rep("white", length(unique_labels)) 
+col_colors <- rep("white", length(unique_labels))
+names(row_colors) <- unique_labels
+names(col_colors) <- unique_labels
+
+
+for (i in seq_len(nrow(Signif_results))) {
+  label <- Signif_results$celltype_CN[i]
+  if (label %in% unique_labels) {
+    correlation <- Signif_results$correlation[i]
+    color <- ifelse(correlation > 0, "red", ifelse(correlation < 0, "blue", "white"))
+    row_colors[label] <- color
+    col_colors[label] <- color
+  }
+}
+
+
+
+row_annotation <- rowAnnotation(
+  Correlation = row_colors[rownames(filtered_matrix)], 
+  col = list(Correlation = c("red" = "#D8423D", "blue" = "#0091CA", "white" = "white")), 
+  annotation_legend_param = list(
+    Correlation = list(
+      title = "Row Correlation",
+      at = c("red", "blue"),
+      labels = c("Positive", "Negative"),
+      labels_gp = gpar(fontsize = 6), 
+      title_gp = gpar(fontsize = 6)
+    )
+  ),
+ 
+  show_annotation_name=FALSE,
+  width=unit(2,"pt")
+)
+
+
+
+column_annotation <- HeatmapAnnotation(
+  Correlation = col_colors[colnames(filtered_matrix)], 
+  col = list(Correlation = c("red" = "#D8423D", "blue" = "#0091CA", "white" = "white")),
+  show_legend = FALSE, 
+  show_annotation_name=FALSE,
+  height=unit(2, "pt") 
+)
+
+
+
+
+mtx=Heatmap(filtered_matrix, 
+        name = "Jaccard Index", 
+        
+        col=col_fun,
+        row_title = "CNMF Modules",
+        column_title = "CNMF Modules",
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        show_row_names = TRUE,
+        show_column_names = TRUE,
+        row_names_gp = gpar(fontsize = 6), 
+        column_names_gp = gpar(fontsize = 6), 
+        row_title_gp = gpar(fontsize = 6), 
+        column_title_gp = gpar(fontsize = 6), 
+        right_annotation = row_annotation,
+        bottom_annotation = column_annotation,
+       
+        heatmap_legend_param = list(
+            title_gp = gpar(fontsize = 6),
+            labels_gp = gpar(fontsize = 6) 
+        )
+             }
+         }
+        )
+
+
+
+    pdf(file = file.path(figures.dir,  
+                       
+                         paste("Jaccard_Distance_analysis_HLCA_all_vs_all_lung_nonunique_filtered_matrix_square", "pdf", sep = ".")),
+        width = 4, 
+        height = 3.5) 
+    print(mtx)
+    
+    dev.off()
+
+
