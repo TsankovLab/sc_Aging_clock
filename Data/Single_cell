@@ -1,0 +1,398 @@
+save_dir='output path'
+
+counts<-readMM(paste0(save_dir,'/counts_2.mtx'))
+counts<-readMM(paste0(save_dir,'/counts_raw.mtx'))
+dim(counts)
+cellMeta<-read.csv(paste0(save_dir,'/counts_cellMeta.csv'))
+head(cellMeta)
+geneMeta<-read.csv(paste0(save_dir,'/counts_geneMeta.csv'))
+dim(geneMeta)
+head(geneMeta)
+
+rownames(counts)<-cellMeta$Barcode
+colnames(counts)<-geneMeta$feature_name
+
+
+is.na(geneMeta$feature_name)
+
+
+srt_new <- CreateSeuratObject(counts = t(counts))
+srt_new@meta.data<-cbind(cellMeta,srt_new@meta.data)
+rownames(srt_new@meta.data)<-colnames(srt_new)
+save(srt_new, file=paste0(save_dir,"HLCA_F.rda"))
+
+
+rm(list=ls())
+library(Seurat)
+load(file=paste0(save_dir,"HLCA_F.rda"))
+sce 
+library(org.Hs.eg.db)
+head(rownames(sce))
+ids=select(org.Hs.eg.db,keys = rownames(sce),
+           columns = c('ENSEMBL','SYMBOL'),
+           keytype = 'ENSEMBL')
+head(ids)
+dim(ids) # [1] 16428 
+ids=na.omit(ids)
+dim(ids) # [1] 15504 
+length(unique(ids$SYMBOL)) # [1] 15494 
+
+ids=ids[!duplicated(ids$SYMBOL),]
+ids=ids[!duplicated(ids$ENSEMBL),]
+pos=match(ids$ENSEMBL,rownames(sce) )
+sce=sce[pos,]
+sce 
+
+
+RenameGenesSeurat <- function(obj , 
+                              newnames ) { 
+  
+  print("Run this before integration. It only changes obj@assays$RNA@counts, @data and @scale.data.")
+  RNA <- obj@assays$RNA
+
+  if (nrow(RNA) == length(newnames)) {
+    if (length(RNA@counts)) RNA@counts@Dimnames[[1]]            <- newnames
+    if (length(RNA@data)) RNA@data@Dimnames[[1]]                <- newnames
+    if (length(RNA@scale.data)) RNA@scale.data@Dimnames[[1]]    <- newnames
+  } else {"Unequal gene sets: nrow(RNA) != nrow(newnames)"}
+  obj@assays$RNA <- RNA
+  return(obj)
+}
+obj=RenameGenesSeurat(obj = sce, 
+                  newnames = ids$SYMBOL)
+save(obj,file=paste0(save_dir,"HLCA_F.rda"))
+
+srt=srt_new
+
+Idents(srt)="percent.mt"
+srt.mito=subset(srt, subset=percent.mt < 20)# very time consuming step ! might need something else for this 
+
+Idents(srt.mito)="nFeature_RNA"
+srt.nfeatures=subset(srt.mito, subset=nFeature_RNA > 400)# very time consuming step ! might need something else for this 
+
+
+Idents(srt.nfeatures)="nCount_RNA"
+srt.QC=subset(srt.nfeatures, subset=nCount_RNA > 1000)# very time consuming step ! might need something else for this 
+saveRDS(srt.QC,"output path ...HLCA_F_QC.rds")
+
+
+
+data_key <- read_excel("parenchyma_metadata_HLCA&Adams.xlsx", sheet = "Sheet2")
+
+
+
+names(data_key)[1]<-gsub("[^sample]","",names(data_key)[1]) ##removed wired alpha-num charactrs from the "sample" column
+
+meta <- srt@meta.data
+
+rownames(data_key)  
+rownames(data_key) <- data_key$sample_id_1  
+rownames(data_key)  
+
+data_key2 <- data_key[as.character(meta$donor_id),]
+
+colnames(data_key2) <- paste0(colnames(data_key2), "_1")  
+
+
+meta <- cbind(meta, data_key2)   
+
+
+srt@meta.data <- meta
+
+
+table(srt@meta.data$age_info_1)
+
+
+
+Sims_2019
+Idents(srt)="dataset"
+srt2=subset(srt,subset=dataset %in% "Sims_2019",invert=TRUE)
+
+
+Idents(srt) = 'tissue_sampling_method'
+srt2=subset(srt,subset=tissue_sampling_method %in% "surgical_resection",invert=TRUE)
+
+
+
+srt$ann_finest_level[srt$ann_finest_level ==paste0("Alveolar M","\U03c6"," CCL3+")] ='Alveolar Macrophages CCL3+'
+srt$ann_finest_level[srt$ann_finest_level ==paste0("Alveolar M","\U03c6"," MT-positive")] ='Alveolar Macrophages MT-positive'
+srt$ann_finest_level[srt$ann_finest_level ==paste0("Alveolar M","\U03c6"," proliferating")] ='Alveolar Macrophages proliferating'
+srt$ann_finest_level[srt$ann_finest_level ==paste0("Interstitial M","\U03c6"," perivascular")] ='Interstitial Macrophages perivascular'
+srt$ann_finest_level[srt$ann_finest_level ==paste0("Monocyte-derived M","\U03c6")] ='Monocyte-derived Macrophages'
+
+
+rm(list = ls())
+library(ggplot2)
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(data.table)
+library(preprocessCore)
+library(patchwork)
+
+
+
+srt=readRDS(file="/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/HLCA_F_QC_Adams_info_DonorLung_harmony.rds")
+
+obj=subset(srt,dataset=="Sheppard_2020", invert=TRUE)
+
+
+
+obj=subset(obj,dataset=="Sims_2019", invert=TRUE)
+
+
+saveRDS(obj,file="output path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed.rds")
+srt=readRDS(file="output path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed.rds")
+
+obj=srt
+
+
+
+obj.subtype.list=SplitObject(obj,split.by = "ann_level_1")
+obj.subtype.list_2=obj.subtype.list
+obj.subtype.list=obj.subtype.list[-5]
+
+
+obj.core.list=list()
+obj.extend.list=list()
+for(i in 1:length(obj.subtype.list)) {
+
+    obj.in.work=obj.subtype.list[[i]]
+    message(paste0("obj.in.work:",names(obj.subtype.list[i])))
+    obj.core.index=subset(obj.in.work, core_or_extension=="core")
+    obj.extend.index=subset(obj.in.work, core_or_extension=="extension")
+    message(paste0("obj subset finished:",names(obj.subtype.list[i])))
+    obj.core.list[[i]]=obj.core.index
+    obj.extend.list[[i]]=obj.extend.index
+}
+
+names(obj.core.list)=names(obj.subtype.list)
+names(obj.extend.list)=names(obj.subtype.list)
+
+save(obj.core.list,file=paste0("/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/Core_extension_labeltransfer/HLCA_full_obj.core.list_lvl1.Rda"))
+
+save(obj.extend.list,file=paste0("/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/Core_extension_labeltransfer/HLCA_full_obj.extend.list_lvl1.Rda"))
+
+obj.core.list=get(load(file=paste0("/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/Core_extension_labeltransfer/HLCA_full_obj.core.list_lvl1.Rda")))
+
+obj.extend.list=get(load(file=paste0("/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/Core_extension_labeltransfer/HLCA_full_obj.extend.list_lvl1.Rda")))
+
+for(i in 3:length(obj.core.list)) {
+
+   
+    message(paste0("start obj label transfer from core to extension:",names(obj.core.list[i])))
+
+    obj.extend.query <- obj.extend.index
+    obj.anchors <- FindTransferAnchors(reference = obj.core.index,# hlca
+     query = obj.extend.query, 
+    dims = 1:30)
+
+    message(paste0("saving anchors:",names(obj.core.list[i])))
+    save(obj.anchors,file=paste0("output path",names(obj.core.list[i]),"_anchors.Rda"))
+
+
+    predictions <- TransferData(anchorset = obj.anchors, refdata = obj.core.index$ann_finest_level, # HLCA LOWER ANNOTATION
+    dims = 1:30)
+
+    obj.extend.query <- AddMetaData(obj.extend.query, metadata = predictions) #an
+
+    save(obj.extend.query, file=paste0("output path","HLCA_full_",names(obj.core.list[i]),"_anchors_ann_finest_level_extended.rds"))
+    save(obj.core.index, file=paste0("output path","HLCA_full_",names(obj.core.list[i]),"_anchors_ann_finest_level_core.rds"))
+}
+
+
+i=2
+obj.core.index=obj.core.list[[i]]
+obj.extend.index=obj.extend.list[[i]]
+
+message(paste0("start obj label transfer from core to extension:",names(obj.core.list[i])))
+
+obj.extend.query <- obj.extend.index
+obj.anchors <- FindTransferAnchors(reference = obj.core.index, query = obj.extend.query, 
+dims = 1:30)
+
+obj.anchors=get(load(file=paste0("output path",names(obj.core.list[i]),"_anchors.Rda")))
+
+predictions <- TransferData(anchorset = obj.anchors, refdata = obj.core.index$ann_finest_level, 
+dims = 1:30)
+
+obj.extend.query <- AddMetaData(obj.extend.query, metadata = predictions)
+
+save(obj.extend.query, file=paste0("output path","HLCA_full_",names(obj.core.list[i]),"_anchors_ann_finest_level_extended.rds"))
+save(obj.core.index, file=paste0("output path","HLCA_full_",names(obj.core.list[i]),"_anchors_ann_finest_level_core.rds"))
+
+#
+figures.dir="output path"
+
+all_dfs_1=list.files(path=paste0(figures.dir), pattern='.rds')
+all_df=list()
+
+
+for( i in 1:length(all_dfs_1)){
+    x=get(load(file = paste0(figures.dir,all_dfs_1[i])))
+    all_df[[i]]=x
+}
+# EXTENED[1] CORE[2] MYELOID
+# EXTENED[3] CORE[4] nk
+all_df[[1]]$predicted.id=all_df[[1]]$ann_finest_level
+all_df[[3]]$predicted.id=all_df[[3]]$ann_finest_level
+all_df[[5]]$predicted.id=all_df[[5]]$ann_finest_level
+all_df[[7]]$predicted.id=all_df[[7]]$ann_finest_level
+
+all_df[-1]# 
+
+
+merged_srt <- merge(all_df[[1]], y = all_df[-1],all=TRUE)
+
+
+saveRDS(merged_srt,file="/ahg/regevdata/projects/ICA_Lung/Ke/Ke_HLCA_full/data_for_R/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level.rds")
+
+srt=merged_srt
+
+srt$cpdb_lvl_2.5_uniform=0
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasmacytoid DCs"] <- 'pDCs'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'Tcells'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'Tcells'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle FAM83D+"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Smooth muscle"] <- 'SmoothMuscle'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SM activated stress response"] <- 'SmoothMuscle'
+
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT0"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Club (non-nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (bronchial)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (nasal)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Goblet (subsegmental)"] <- 'Secretory'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "pre-TB secretory"] <- 'Secretory'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG duct"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG mucous"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (bronchial)"] <- 'SMG'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "SMG serous (nasal)"] <- 'SMG'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Ionocyte"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Neuroendocrine"] <- 'Rare'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Tuft"] <- 'Rare'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Plasma cells"] <- 'Plasma'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "NK cells"] <- 'NK'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Deuterosomal"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (nasal)"] <- 'Multiciliated'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Multiciliated (non-nasal)"] <- 'Multiciliated'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'Monocytes'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'Monocytes'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mesothelium"] <- 'Mesothelium'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Mast cells"] <- 'Mast'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'Macrophages'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'Macrophages'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC differentiating"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC mature"] <- 'LymphaticEC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Lymphatic EC proliferating"] <- 'LymphaticEC'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hematopoietic stem cells"] <- 'HSC'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Fibroblasts'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'Fibroblasts'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC1"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "DC2"] <- 'DC'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Migratory DCs"] <- 'DC'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous pulmonary"] <- 'Bloodvessels'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'Bloodvessels'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Basal'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Basal'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "B cells"] <- 'B'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2'
+
+srt$cpdb_lvl_2.5_uniform[srt$LTforUnknown_ann_finest_level == "AT1"] <- 'AT1'
+
+table(srt$cpdb_lvl_2.5_uniform)
+
+
+srt$cpdb_lvl_3.5_uniform=srt$cpdb_lvl_2.5_uniform
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD4 T cells"] <- 'CD4T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "CD8 T cells"] <- 'CD8T'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "T cells proliferating"] <- 'TProlif'
+
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Classical monocytes"] <- 'ClassicMono'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Non-classical monocytes"] <- 'NonclassicMono'
+
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Interstitial Mph perivascular"] <- 'IM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Monocyte-derived Mph"] <- 'MoAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph CCL3+"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph MT-positive"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar macrophages"] <- 'TRAM'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar Mph proliferating"] <- 'TRAMProlif'
+
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2"] <- 'AT2'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "AT2 proliferating"] <- 'AT2Prolif'
+
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC arterial"] <- 'ECArtery'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC aerocyte capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC general capillary"] <- 'ECCap'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "EC venous systemic"] <- 'ECVein'
+
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Adventitial fibroblasts"] <- 'AdventitialFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Alveolar fibroblasts"] <- 'AlveolarFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Myofibroblasts"] <- 'MyoFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Peribronchial fibroblasts"] <- 'PeriFB'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Pericytes"] <- 'Pericytes'
+srt$cpdb_lvl_3.5_uniform[srt$LTforUnknown_ann_finest_level == "Subpleural fibroblasts"] <- 'SubpleuralFB'
+
+table(srt$cpdb_lvl_2.5_uniform_v2)
+
+
+
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+
+
+
+srt$cpdb_lvl_2.5_uniform_v4=srt$cpdb_lvl_2.5_uniform_v3
+srt$cpdb_lvl_2.5_uniform_v4[srt$cpdb_lvl_2.5_uniform_v2 == "CD4T"] <- 'T-total'
+srt$cpdb_lvl_2.5_uniform_v4[srt$cpdb_lvl_2.5_uniform_v2 == "CD8T"] <- 'T-total'
+table(srt$cpdb_lvl_2.5_uniform_v4)
+
+#over 0 epithelial
+srt_T=subset(srt, idents=c("AT1","AT2","Basal","Secretory"))
+#over 0 myeloid
+srt_T=subset(srt, idents=c("Macrophages","Monocytes","DC"))
+#over 0 tnk
+srt_T=subset(srt, idents=c("CD4T","CD8T","NK"))
+
+
+
+
