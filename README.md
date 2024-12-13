@@ -3,7 +3,7 @@ This repository contains pipelines for single-cell derived aging clock and aging
 
 System Requirements:
 
-Operating System: Tested on RedHat 7.7 x86_64.
+Operating System: Tested on RedHat 7.7 x86_64.  
 R Version: 4.1.0
 
 Installing the conda environment:
