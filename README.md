@@ -243,7 +243,7 @@ fwrite(x = data_to_write_out2, row.names=TRUE, file=paste0(proj.dir,"GTex_lung_e
 ### PBMCs  
 
 Here is the link to download the PBMC data:  
-[PBMC data](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression)     
+[PBMC data](https://www.synapse.org/Synapse:syn49637038/files/)   
 
 ```
 
