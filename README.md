@@ -1,6 +1,9 @@
 # sc_Aging_clock
-This repository contains pipelines for single-cell derived aging clock and aging pipeline analysis and reproduces the main analyses in our manuscript.
+#### This repository contains pipelines for single-cell derived aging clock and aging pipeline analysis and reproduces the main analyses in our manuscript, "Human Cellular Clock of the Aging Lung Parenchyma". 
+Scripts are organized by figure in separate folders;
+You can find the link to download the dataset in the following and for creating the object you can refer to the scripts in the data dolder.        
 
+     
 System Requirements:
 
 Operating System: Tested on RedHat 7.7 x86_64.  
