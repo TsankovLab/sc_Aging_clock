@@ -1645,3 +1645,256 @@ projDir="output pat"
 pdf(paste0(projDir,module_name,"_modules_deconvolution_v2_reproduced.pdf"), width = 2.5*4, height = 4*height_factor, useDingbats=FALSE)
 cowplot::plot_grid(plotlist = mean.plots, ncol=4)
 dev.off() 
+
+
+####supplements
+####Figure_S1D
+srt=get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
+refined_label_meta="cpdb_lvl_2.5_uniform_v3"
+
+sampleID_meta="sample"
+obj=srt
+Idents(srt)="ann_level_1"
+
+
+Immune=subset(srt,idents=c("Immune"))
+obj=Immune
+Nonimmune=subset(srt,idents=c("Immune"),invert=TRUE)
+obj=Nonimmune
+
+
+sampleID <- obj$sample
+    
+    Age <- as.numeric(obj$Age)
+    
+    BMI<- as.factor(obj$BMI)
+    sex<- as.factor(obj$sex)
+    smoking_status=as.factor(obj$smoking_status)
+    self_reported_ethnicity=as.factor(obj$self_reported_ethnicity)
+
+    df <- data.frame(sampleID, Age)
+    # df <- data.frame(sampleID, Age,BMI,sex,smoking_status,self_reported_ethnicity)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+    Dout <- t(prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2))
+    df2 <- as.data.frame.matrix(Dout)
+
+    
+    df <- df[match(rownames(Dout), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+
+
+final
+
+comp=final 
+comp = comp[,-1] #moves sampleIDs to row names
+
+comp.subset=comp
+
+meta=obj@meta.data
+
+
+old_samples <- meta %>%
+  
+  filter(age_info_60_old == "Old") %>%
+  pull(sample)
+Old=c(unique(old_samples))
+
+young_samples <- meta %>%
+  
+  filter(age_info_60_old == "Young") %>%
+  pull(sample)
+
+Young=c(unique(young_samples))
+
+intermediate_samples <- meta %>%
+ 
+  filter(age_info_60_old == "Intermediate") %>%
+  pull(sample)
+Intermediate=c(unique(intermediate_samples))
+
+
+
+
+
+myhigh.all = Old 
+myhigh.all = Intermediate 
+mylow.all = Young
+all=c(Young,Intermediate,Old)
+
+out_dir= paste0("output path")
+
+composition.analysis.sampling_Ke_regression <- function(all, n.iter, selection, comp, test.name, out.dir) {
+if (!file.exists(out.dir)){dir.create(out.dir, recursive = T)}
+  n = 1:n.iter
+  sel = selection
+  
+  res.list = list()
+  for (i in 1:ncol(comp))
+  {
+    mat = matrix(nrow = length(n), ncol = length(sel))
+    rownames(mat) = n
+    colnames(mat) = sel
+    res.list[[i]] = mat
+  }
+  names(res.list) = colnames(comp)
+  res.list.direction = res.list.corrected = res.list
+  
+  print("Running test")
+  for (i in 1:length(n))
+  {
+    set.seed(n[i])
+    for (j in 1:length(sel))
+    {
+      my.all = sample(all, sel[j])
+      
+      xx=comp[my.all,]  ## low
+      age=comp[my.all,"Age"]
+      for (k in 1:ncol(comp))
+      {
+        cat("\r", i, "->", j, "->", k)
+        if (test.name == "wilcox") {
+          group1 = as.numeric(xx1[,k])
+          group2 = as.numeric(xx2[,k])
+          pval = wilcox.test(group1, group2)$p.value
+        } else if (test.name == "linear.regr") {
+          xx = cbind(xx, predictor = age)
+          
+          model <- cor.test(xx[,"predictor"],xx[,k],method = "spearman") 
+          
+          pval=model$p.value
+        } else {return("Invalid test.name input. Select between wilcox or spearman regression")} 
+        
+        res.list[[k]][i,j] = pval
+      }
+    }
+  }
+  
+  print("Running BH correction")
+  for (k in 1:length(res.list))
+  {
+    for (i in 1:length(n))
+    {
+      cat("\r", k, "->", i)
+      res.list.corrected[[k]][i,] = p.adjust(res.list[[k]][i,], method = "BH")
+    }
+  }
+  
+  save(res.list, file = paste0(out.dir, "/output.pval.", test.name, ".Rda")) 
+  save(res.list.corrected, file = paste0(out.dir, "/output.pval.BHcorrected.", test.name, ".Rda"))
+  print("Done!")
+  
+}
+composition.analysis.sampling_Ke_regression(all = all,
+                              n.iter = 100,    
+                              selection = c(15,30,45,60,75,90,105,120),   
+                              comp = comp.subset,
+                              test.name = "linear.regr",   
+                              out.dir = out_dir)
+
+calculate_upper_whisker <- function(x) {
+  q3 <- quantile(x, 0.75,na.rm=TRUE)
+  q1 <- quantile(x, 0.25,na.rm=TRUE)
+  iqr <- q3 - q1
+  return(min(max(x,na.rm=TRUE), q3 + 1.5 * iqr))
+}
+
+composition.analysis.sampling.plot <- function(input.dir, 
+                                               type, ,
+                                               pthres,
+                                               test.name, , 
+                                               cell.name = c(), ## needed for dirichlet -- subset the ones we need from all compositions
+                                               text.size = 5,
+                                               plot.ncol = 4,
+                                               plot.width = 5,
+                                               plot.height = 1.25,
+                                               out.dir) {
+  if (!file.exists(out.dir)){dir.create(out.dir, recursive = T)}
+  thres = -log10(pthres)
+  
+  if (type == "pval") {
+    res.list = get(load(paste0(input.dir, "/output.pval.", test.name, ".Rda")))
+  } else if (type == "adj.pval") {
+    res.list = get(load(paste0(input.dir, "/output.pval.BHcorrected.", test.name, ".Rda")))
+  } else {return("Invalid type input. Select between pval or adj.pval")}
+  
+  if (length(cell.name) >= 1) {
+    res.list = res.list[cell.name]
+  }
+  
+  for (i in 1:length(res.list))
+  {
+    res.list[[i]] = -log10(res.list[[i]])
+  }
+  
+  p.list = list()
+  for (k in 1:length(res.list))
+  {
+    cat("\r", k)
+    res = res.list[[k]]
+    res.melt = reshape2::melt(res)
+    res.melt$Var2 = factor(res.melt$Var2, levels = colnames(res))
+    
+    lim.all = c()
+    for (i in 1:ncol(res))
+    {
+      val = calculate_upper_whisker(res[,i])
+      lim.all = c(lim.all, val)
+    }
+    lim = max(lim.all)
+    
+    p<-ggplot(res.melt, aes(x=Var2, y=value)) + 
+      geom_boxplot(outlier.shape = NA, size = 0.25) + 
+      labs(title = names(res.list[k]),y = "-Log10 P-Value", x = "scRNA-seq Samples")+
+      #ylim(c(0, lim+1))+
+      coord_cartesian(ylim = c(0, lim.all[i]+1))+
+      geom_hline(yintercept = thres, linetype = "dotted", size=0.25)+
+      theme(plot.title = element_text(size=text.size, face="bold", hjust=0.5, color = "black"),
+            axis.title = element_text(size=text.size, face="bold", hjust=0.5, color = "black"),
+            axis.text.x = element_text(color = "black", size = text.size, vjust = 0.5, hjust=0.5),
+            axis.text.y = element_text(color = "black", size = text.size),
+            axis.line = element_line(colour = "black", size = 0.25),
+            axis.ticks = element_line(colour = "black", size = 0.25),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            panel.background = element_blank(),
+            plot.margin = margin(0.5, 0.5, 0.5, 0.5, "mm"),
+            legend.position="none")
+    
+   
+    nsignif = c()
+    for (i in 1:ncol(res))
+    {
+      nsignif[i] = length(which(res[,i] >= thres))
+    }
+    label.add = data.frame(order = colnames(res), text = paste0(nsignif))
+    label.add$order = factor(label.add$order, levels = colnames(res))
+    
+    for (i in 1:nrow(label.add)) {
+      p <- p + annotate("text", x = label.add$order[i], y = lim.all[i], label = label.add$text[i], vjust = -0.5, size = text.size*0.35)
+    }
+    p.list[[k]] = p
+  }
+  
+  ggsave(cowplot::plot_grid(plotlist = p.list, ncol = plot.ncol), 
+         width = plot.width, 
+         height = plot.height,
+         file = paste0(out.dir, "boxplot.comp.", type, ".", test.name, ".thres.", pthres, ".pdf"))
+  
+}
+
+
+composition.analysis.sampling.plot(input.dir = out_dir,
+                                  out.dir = out_dir,
+                                  type = "pval", 
+                                  pthres = 0.05,  
+                                  test.name = "linear.regr",  
+                                  
+                                  text.size = 6,   
+                                  plot.ncol = 3,
+                                  plot.width = 20,
+                                  plot.height = 20)
