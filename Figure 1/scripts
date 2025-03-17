@@ -1647,7 +1647,78 @@ cowplot::plot_grid(plotlist = mean.plots, ncol=4)
 dev.off() 
 
 
-####supplements
+########supplements
+####Figure_S1A
+
+figures.dir="..."
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+meta_data=srt@meta.data
+library(ColorBrewer)
+continuous_palette <- rev(brewer.pal(n = 7, name = "RdBu"))
+
+threecolors=c("#0091CA", "#D3D3D3", "#D8423D")
+continuous_palette <- rep(threecolors, times = c(3, 2, 2))
+meta_data <- srt@meta.data
+
+
+meta_data$Age <- as.numeric(meta_data$Age)
+
+breaks <- c(0, 20, 30, 40, 50, 60, 70, 81)
+
+labels=c("18-19","20-29","30-39","40-49","50-59","60-69","70-80")
+
+meta_data$age_decade <- cut(meta_data$Age, 
+                            breaks = breaks, 
+                            # breaks = seq(0, 90, by = 10), 
+                            labels = labels,
+                            # labels = paste(seq(10, 90, by = 10)),
+                            include.lowest = TRUE)
+
+
+sample_count_per_decade <- meta_data %>%
+  distinct(sample, age_decade) %>%  # Ensure each sample is counted only once per decade
+  group_by(age_decade) %>%
+  summarise(sample_count = n(), .groups = "drop")  # Count unique samples
+
+####@@@ if need continus
+meta_data$age_decade_numeric <- as.factor(as.character(meta_data$age_decade))
+sample_count_per_decade <- meta_data %>%
+  distinct(sample, age_decade, age_decade_numeric) %>%  # Keep numeric version
+  group_by(age_decade, age_decade_numeric) %>%
+  summarise(sample_count = n(), .groups = "drop")
+
+
+library(ggplot2)
+pdf(file=paste0(figures.dir,"/HLCA_full_all_histogram_for_age_using_sample_by10.pdf"),
+
+  height=sqrt((unique(14)))-2,
+  width=log((2.5))+2.5)
+
+
+
+his=ggplot(sample_count_per_decade, aes(x = age_decade, y = sample_count, fill = age_decade_numeric)) +
+  geom_bar(stat = "identity") +
+  theme_classic()+
+  
+  scale_fill_manual(
+    values = continuous_palette)+
+  labs(title = "Sample Distribution Across Age Groups",
+       x = "Age Groups",
+       y = "Lung Samples Counts") +
+  theme(
+    text = element_text(size = 6),  # Set font size for all text
+    axis.text = element_text(size = 6),
+    axis.title = element_text(size = 6),
+    plot.title = element_text(size = 6, face = "bold"),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    axis.text.x = element_text()
+  )
+
+
+his
+dev.off()
+
 ####Figure_S1D
 srt=get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
 refined_label_meta="cpdb_lvl_2.5_uniform_v3"
