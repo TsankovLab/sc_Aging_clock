@@ -1874,7 +1874,7 @@ calculate_upper_whisker <- function(x) {
 }
 
 composition.analysis.sampling.plot <- function(input.dir, 
-                                               type, ,
+                                               type, 
                                                pthres,
                                                test.name, , 
                                                cell.name = c(), ## needed for dirichlet -- subset the ones we need from all compositions
@@ -1969,3 +1969,332 @@ composition.analysis.sampling.plot(input.dir = out_dir,
                                   plot.ncol = 3,
                                   plot.width = 20,
                                   plot.height = 20)
+####figure_S1E
+out_dir= "..."
+
+composition_regression_model <- function(obj, category_meta_col, tag, out_dir,height=6,width=7){
+    out_dir <- paste0(out_dir, category_meta_col, '/', tag, '/')
+    if (!file.exists(out_dir)){
+        dir.create(out_dir, recursive=TRUE)
+    }
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+ 
+    Dout <- t(prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2))
+    df2 <- as.data.frame.matrix(Dout)
+ 
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(Dout), rownames(df)), ]
+ 
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+ 
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            # model2 <- glm(df[[subtype]] ~ Age, family='gaussian', data=df) #! Model for GLM
+            # model2 <- lmrob(df[[subtype]] ~ Age, data=df) #! Model 2 for lmrob
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") # model for spearman
+            # p_val <- unname(coef(summary(model2))[,4][2])# pval for lmrob and glm
+            p_val=model2$p.value # pval for spearman
+ 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+ 
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+ 
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+ 
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+ 
+    out_df <- data.frame(names, p_vals, gradients)
+    #out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr')
+ 
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] < 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        }
+    }
+    out_df$directed_p_value <- directed_p_value
+ 
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+ 
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals >= 0.05] <- 'not_sig'
+ 
+    figs <- list()
+ 
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             # Color by groups
+            palette = c("#00AFBB", "#D3D3D3", "#FC4E07"), # Custom color palette
+            sorting = "descending",                       # Sort value in descending order
+            add = "segments",                             # Add segments from y = 0 to dots
+            add.params = list(color = "lightgray", size = 1), # Change segment color and size
+            #group = "direction",                                # Order by groups
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 3,                                 # Large dot size
+            #label = out_df$P_value,                        # Add mpg values as dot labels
+            font.label = list(color = "white", size = 6, 
+                                vjust = 0.5),               # Adjust label parameters
+            ggtheme = theme_pubr()                        # ggplot2 theme
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")+
+    theme(plot.title = element_text(size = 6),
+    axis.text = element_text(size = 6),
+    axis.title = element_text(size = 6),
+    legend.title = element_text(size = 6),        # Legend title size
+    legend.text = element_text(size = 6),
+    legend.position = "none")
+ 
+figs[[1]] <- m
+    png(paste0(out_dir, category_meta_col, '_', tag, "_composition_lollipop_test_wFDR.png"), height = 800, width = 800)
+    print(figs)
+    dev.off()
+    pdf(paste0(out_dir, category_meta_col, '_', tag, "_composition_lollipop_test_wFDR.pdf"), height = height, width = width)
+    print(figs)
+    dev.off()
+}
+ 
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
+refined_label_meta <- 'LTforUnknown_ann_finest_level'
+
+sampleID_meta <- 'sample'
+ 
+
+category_meta_col='Age'
+tag=paste0('total_wFDR_',refined_label_meta)
+ 
+immune=subset(srt, subset=ann_level_1 == "Immune", invert=FALSE)
+nonimmune=subset(srt, subset=ann_level_1 == "Immune", invert=TRUE)
+ 
+composition_regression_model(obj=immune, category_meta_col='Age', tag=paste0('Immune_total_woFDR_over1k',refined_label_meta), out_dir= "...")
+composition_regression_model(obj=nonimmune, category_meta_col='Age', tag=paste0('Non_immune_total_woFDR_over1k',refined_label_meta), out_dir= "...")
+
+
+
+####Figure_S1F
+
+
+gene_name = c()
+
+gene_name=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "CDKN1A", "CDKN2A", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB1", "IGFBP5", "GDF15", "IGF1", "JUN", "MIF", "TGFB1", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "TIMP2", "CTSB", "MMP12", "MMP3", "CTNNB1", "CXCR2", "ETS2", "IL15", "IL7", "MMP9", "PLAUR", "TNF", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "CCL5", "IGFBP6", "ANGPTL4", "EDN1", "ITGA2", "C3", "CXCL10", "CXCL12", "PTBP1", "GEM", "BMP2", "CCL20", "CCL3", "CCL7", "CSF1", "CSF2", "DKK1", "EREG", "MMP13", "MMP2", "PAPPA", "PECAM1", "WNT16", "SERPINE2", "ANGPT1", "KITLG", "ANG", "BMP6", "CCL1", "CCL13", "CCL26", "CCL4", "CCL8", "CD55", "CD9", "CSF2RB", "CXCL16", "EGF", "ESM1", "FGF7", "GMFG", "HGF", "ICAM3", "IL13", "IL18", "IL2", "IL6ST", "INHA", "ITPKA", "MMP14", "NRG1", "PGF", "PIGF", "PTGER2", "PTGES", "RPS6KA5", "TNFRSF1A", "VEGFC", "ACVR1B", "BEX3", "CCL16", "CCL24", "CCL3L1", "CST4", "FGF1", "IL10", "IL32", "IQGAP2", "LCP1", "NAP1L4", "SCAMP4", "SELPLG", "SEMA3F", "SERPINB4", "SPP1", "SPX", "TUBGCP2", "VGF")
+
+ 
+gene_name_2=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "CDKN1A", "CDKN2A", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB1", "IGFBP5", "GDF15", "IGF1", "JUN", "MIF", "TGFB1", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "TIMP2", "CTSB", "MMP12", "MMP3", "CTNNB1", "CXCR2", "ETS2", "IL15", "IL7", "MMP9", "PLAUR", "TNF", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "CCL5", "IGFBP6", "ANGPTL4", "EDN1", "ITGA2", "C3", "CXCL10", "CXCL12", "PTBP1", "GEM", "BMP2", "CCL20", "CCL3", "CCL7", "CSF1", "CSF2", "DKK1", "EREG", "MMP13", "MMP2", "PAPPA", "PECAM1", "WNT16", "SERPINE2", "ANGPT1", "KITLG", "ANG", "BMP6", "CCL1", "CCL13", "CCL26", "CCL4", "CCL8", "CD55", "CD9", "CSF2RB", "CXCL16", "EGF", "ESM1", "FGF7", "GMFG", "HGF", "ICAM3", "IL13", "IL18", "IL2", "IL6ST", "INHA", "ITPKA", "MMP14", "NRG1", "PGF", "PIGF", "PTGER2", "PTGES", "RPS6KA5", "TNFRSF1A", "VEGFC", "ACVR1B", "BEX3", "CCL16", "CCL24", "CCL3L1", "CST4", "FGF1", "IL10", "IL32", "IQGAP2", "LCP1", "NAP1L4", "SCAMP4", "SELPLG", "SEMA3F", "SERPINB4", "SPP1", "SPX", "TUBGCP2", "VGF")
+
+names(gene_name)="SenMayo"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="SenMayo"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="SenMayo"
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+obj <- AddModuleScore(object = obj, features = gene_list, name = names(gene_list))
+
+if(length(gene_list[[1]])>1){
+   module_scores <- obj@meta.data[,paste0(names(gene_list),"1")] 
+   aggregate_data <- aggregate(module_scores, 
+    by = list(cell_type = obj@meta.data[, refined_label_meta],
+    sample = obj@meta.data[, sampleID_meta]), 
+    FUN = median)
+   } else{
+    module_scores <- obj@assays$RNA@data[names(gene_list), ]
+aggregate_data2=AverageExpression(obj,group.by = c(sampleID_meta,refined_label_meta),layer="data")
+expr_matrix <- aggregate_data2$RNA
+column_names <- colnames(expr_matrix)
+cleaned_column_names <- sub("data\\[.*,\\s.*\\]:", "", column_names)
+
+mki67_data <- expr_matrix[names(gene_list), ]
+
+split_names <- do.call(rbind, strsplit(cleaned_column_names, "_(?!.*_)", perl = TRUE))
+
+
+samples <- split_names[, 1]  
+cell_types <- split_names[, 2]  
+
+
+aggregate_dataX <- data.frame(
+  cell_type = cell_types,
+  sample = samples,
+  x = as.numeric(mki67_data)
+)
+
+aggregate_dataX <- aggregate_dataX[order(aggregate_dataX$sample), ]
+
+rownames(aggregate_dataX)=NULL
+aggregate_dataX$x=log1p(aggregate_dataX$x)
+
+aggregate_data=aggregate_dataX
+
+   }
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+  
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr')
+
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+    png(paste0(out_dir, category_meta_col, '_', tag, "_expression_lollipop_test_woFDRall.png"), height = 800, width = 800)
+    print(figs)
+    dev.off()
+
+    pdf(paste0(out_dir, category_meta_col, '_', tag, "_expression_lollipop_test_woFDRall.pdf"), height = 6, width = 8)
+    print(figs)
+    dev.off()
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "_subtype_expression_regression_model_output_woFDRall.csv"), row.names = FALSE)
+}
+
+expression_regression_model(obj=srt, category_meta_col='Age', tag="SenMayo", out_dir = "...") 
