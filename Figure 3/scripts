@@ -769,7 +769,11 @@ projDir = 'output path'
 pdf (paste0(projDir,'/FIGURE_CXCLs_correlation_GTEX_lung_CXCL_Bulk_T_total_v2_Tcells.pdf'), width = 11/2, height = 5/5*2.5)
 print (wrap_plots (corr_res))
 dev.off() 
-####Supplements
+
+
+######Supplements
+
+
 ####Figure_S3A
 
 rm(list=ls())
@@ -1109,3 +1113,236 @@ require (muscat)
 library(muscat)
 require (limma)
 library(SingleCellExperiment)
+
+
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k_TNK.Rda"))
+projDir <- "..."
+
+
+force = FALSE
+do.fgsea = TRUE
+logfcThreshold = .25
+pvalAdjTrheshold = 0.05
+ds_method = "DESeq2"
+metaGroupName1 = 'sample'
+metaGroupName2 = 'cpdb_lvl_2.5_uniform_v2' 
+metaGroupName3 = 'age_info_60_old'
+muscatIdents = c('Old','Young')
+
+pbDS_min_cells = 10
+topGenes = 40
+org = 'human'
+source(".../useful_functions.R")
+
+if (!file.exists (paste0(projDir, 'muscatall_pseudobulks_',metaGroupName2,'_method_',ds_method,'.rds')) | force)
+	{
+	message ('Convert seurat object to SingleCellExperiment object')
+	ei = data.frame (
+		sample_id = as.factor(srt@meta.data[,metaGroupName1]),
+		cluster_id = as.factor(srt@meta.data[,metaGroupName2]),
+		group_id = as.factor(srt@meta.data[,metaGroupName3]))
+	rownames(ei) <- colnames(srt)
+	sce <- SingleCellExperiment (list(counts=srt@assays$RNA@counts, logcounts = srt@assays$RNA@data),
+    	colData=ei,          
+    	rowData=rownames(srt),
+    	metadata=list(experiment_info = ei))
+ 
+	nigenes = NI.genes (rownames (sce),
+			ni.goterms = c('ribosome biogenesis', 'ncRNA processing','RNA processing','oxidation.reduction process','NADH oxidatio'),
+			ni.genes = c('^MT','^RPL','^mt-','^RPS','^MT-')) # remove batchy genes
+	sce = sce[!rownames (sce) %in% nigenes, ]
+ 
+
+message ('Generate pseudobulks')
+pb <- aggregateData (sce,
+    	assay = "counts", fun = "sum",
+    	by = c('cluster_id', 'sample_id'))
+    	# run pseudobulk (aggregation-based) DS analysis
+	message ('Run muscat DS test')
+	# mm = model.matrix (~ 0 + ei$group_id+ei$batch_id)
+	mm = model.matrix (~ 0 + ei$group_id)
+	dimnames(mm) = list(ei$sample_id, levels(as.factor(ei$group_id)))
+	contrast = makeContrasts(paste0(muscatIdents[1],'-',muscatIdents[2]), levels = mm)
+	ds_pb = pbDS(pb, design = mm, contrast = contrast,  method= ds_method, min_cells=pbDS_min_cells,filter="none") ##stopped here##
+	
+	saveRDS (sce, paste0(projDir, 'muscatall_sce_',metaGroupName2,'_method_',ds_method,'.rds'))
+	saveRDS (pb, paste0(projDir, 'muscatall_pseudobulks_',metaGroupName2,'_method_',ds_method,'.rds')) #Pseudobulk and SCE object will be same
+	saveRDS (ds_pb, paste0(projDir, 'muscatall_results_',metaGroupName2,'_method_',ds_method,pbDS_min_cells,'.rds')) ###Only this entity needs to be generated under 10, 1000 cells and 2000 cells.
+	} else {
+	sce = readRDS (paste0(projDir, 'muscatall_sce_',metaGroupName2,'_method_',ds_method,'.rds'))
+	pb = readRDS (paste0(projDir, 'muscatall_pseudobulks_',metaGroupName2,'_method_',ds_method,'.rds'))
+	ds_pb = readRDS	(paste0(projDir, 'muscatall_results_',metaGroupName2,'_method_',ds_method,pbDS_min_cells,'.rds'))
+}
+
+
+
+sce = readRDS (paste0(projDir, 'muscatall_sce_',metaGroupName2,'_method_',ds_method,'.rds'))
+pb = readRDS (paste0(projDir, 'muscatall_pseudobulks_',metaGroupName2,'_method_',ds_method,'.rds'))
+ds_pb = readRDS	(paste0(projDir, 'muscatall_results_',metaGroupName2,'_method_',ds_method,pbDS_min_cells,'.rds'))
+
+
+tbl_df = do.call (rbind, ds_pb[['table']][[1]])
+colnames (tbl_df)[colnames (tbl_df) == 'logFC'] = 'avg_log2FC'
+colnames (tbl_df)[colnames (tbl_df) == 'p_adj.loc'] = 'p_val_adj'
+colnames (tbl_df)[colnames (tbl_df) == 'cluster_id'] = 'cluster'
+
+addGene = c("WNT1", "WNT2", "WNT2B", "WNT3", "WNT3A", "WNT4", "WNT5A", "WNT5B", "WNT6", "WNT7A", "WNT7B", "WNT8A", "WNT8B", "WNT9A", "WNT9B", "WNT10A", "WNT10B", "WNT11", "WNT16",
+			'FZD1', "FZD2", "FZD3", "FZD4", "FZD6", "FZD7", "FZD8", "FZD9", "FZD10", "LRP5", "LRP6", "ROR1", "ROR2", "RYK", "CTNNB1", "AXIN1", "AXIN2", "DVL1", "PLCB1", "WIF1") ## insert your gene list of interest here
+# TNK modules
+addGene = c("GZMH", "CD8A", "CCL5", "HCST", "CD3D", "CD8B", "GZMA", "NKG7", "CD3G", "IL32", # CN8
+	"CD3E", "CST7", "SH3BGRL3", "CD52", "UCP2", "IL2RG", "PFN1", "GIMAP4", # CN8
+	"LITAF", "CORO1A", "ITGB2", "LIMD2", "RAC2", "S100A4", "IFITM1", # CN8
+	"TNFAIP3", "ZFP36", "KLF6", "CD69", "NFKBIA", "FOS", "FOSB", "PPP1R15A", # CN9
+	"BTG2", "RGCC", "NFKBIZ", "EGR1", "JUNB", "JUN", "LMNA", "DUSP1", # CN9
+	"TSC22D3", "CSRNP1", "MYADM", "PHLDA1", "ZFP36L2", "YPEL5", "IER2", "PER1", "MCL1",# CN9
+	"XCL2", "CCL4", "CCL3", "NR4A2", "CCL4L2", "EGR2", "IRF8", "XCL1", "DUSP2", "IFNG", 
+	"ID2", "NFKBID", "SDCBP", "AMD1", "CD160", "MAFF", "SLA", "CHMP1B", "UBB", "TRDC", 
+	"SELENOK", "HOPX", "CREM", "CLEC2B", "MCL1", # CN10
+	"DNAJB1", "HSPE1", "HSPH1", "HSP90AA1", "HSPB1", "HSPA6", "ZFAND2A", "HSPA8", "HSPD1", "HSP90AB1", "BAG3", "DNAJA1", "NR4A1", "DUSP1", "CACYBP", "UBB", "DNAJB4", "PPP1R15A", "JUN", "SERPINH1", "IER5", "RHOB", "ANKRD37", "NEU1", "GADD45B"
+	)
+
+addGene = c("GZMH", "CD8A", "CCL5", "HCST", "CD3D", "CD8B", "GZMA", "NKG7", "CD3G", "IL32", # CN8
+	"CD3E", "CST7", "SH3BGRL3", "CD52", "UCP2", "IL2RG", "PFN1", "GIMAP4", # CN8
+	"LITAF", "CORO1A", "ITGB2", "LIMD2", "RAC2", "S100A4", "IFITM1")
+
+addGene = c("TNFAIP3", "ZFP36", "KLF6", "CD69", "NFKBIA", "FOS", "FOSB", "PPP1R15A", # CN9
+	"BTG2", "RGCC", "NFKBIZ", "EGR1", "JUNB", "JUN", "LMNA", "DUSP1", # CN9
+	"TSC22D3", "CSRNP1", "MYADM", "PHLDA1", "ZFP36L2", "YPEL5", "IER2", "PER1", "MCL1")
+
+addGene=c("XCL2", "CCL4", "CCL3", "NR4A2", "CCL4L2", "EGR2", "IRF8", "XCL1", "DUSP2", "IFNG", 
+	"ID2", "NFKBID", "SDCBP", "AMD1", "CD160", "MAFF", "SLA", "CHMP1B", "UBB", "TRDC", 
+	"SELENOK", "HOPX", "CREM", "CLEC2B", "MCL1") #CN10
+addGene=c(	"DNAJB1", "HSPE1", "HSPH1", "HSP90AA1", "HSPB1", "HSPA6", "ZFAND2A", "HSPA8", "HSPD1", "HSP90AB1", "BAG3", "DNAJA1", "NR4A1", "DUSP1", "CACYBP", "UBB", "DNAJB4", "PPP1R15A", "JUN", "SERPINH1", "IER5", "RHOB", "ANKRD37", "NEU1", "GADD45B"
+)
+
+# Myeloid modules
+
+addGene = c("FOS", "RHOB", "ATF3", "FOSB", "KLF4", "JUN", "ZFP36", "KLF2", 
+	"DUSP1", "NR4A1", "JUNB", "KLF6", "NFKBIZ", "BTG2", "PPP1R15A", "IER2",
+	 "BHLHE40", "MIR4485", "ZFP36L2", "EGR1", "CYBB", "DNAJB1", "CD83", "TSC22D3", "CITED2",# cn3
+	 "TMSB4X", "RAB5IF", "ATP5F1E", "SELENOH", "BLOC1S1", "ATP5MG", "GPX1", "ATP5MF", 
+	 "ATP5PO", "ATP5ME", "CSTB", "ELOB", "NBEAL1", "NDUFA11", "S100A6", "ATP5MK", 
+	 "DYNLL1", "CSTA", "ATP5MC3", "NDUFC2", "PELATON", "FTH1", "FTL", "ARPC1B", "LGALS1", #cd4
+	 "CXCL10", "GBP1", "GBP5", "IFIT2", "TNFSF10", "IFIT1", "IFIT3", "ISG15", "CXCL9", 
+	 "IDO1", "STAT1", "MX1", "CCL8", "TNFSF13B", "WARS1", "SAA1", "CALHM6", "VAMP5", 
+	 "ISG20", "IRF7", "CCL5", "GBP2", "IL4I1", "SLAMF7", "IRF1", # 25
+	 "TYMS", "RRM2", "NUSAP1", "UBE2C", "STMN1", "H4C15", "HMGB2", "PCLAF", 
+	 "CTD-2116N17.1", "PHF19", "HMGN2", "ATAD2", "CKS2", "TMPO", "CENPU", "HS3ST4", 
+	 "CEP128", "PLP2", "HMGB1P5", "TUBA1B", "EZH2", "LMNB1", "THSD4", "FADS1", "POLA1" #30
+	 )
+
+addGene = c("FOS", "RHOB", "ATF3", "FOSB", "KLF4", "JUN", "ZFP36", "KLF2", 
+	"DUSP1", "NR4A1", "JUNB", "KLF6", "NFKBIZ", "BTG2", "PPP1R15A", "IER2",
+	 "BHLHE40", "MIR4485", "ZFP36L2", "EGR1", "CYBB", "DNAJB1", "CD83", "TSC22D3", "CITED2")# cn3
+
+addGene=c(	 "TMSB4X", "RAB5IF", "ATP5F1E", "SELENOH", "BLOC1S1", "ATP5MG", "GPX1", "ATP5MF", 
+	 "ATP5PO", "ATP5ME", "CSTB", "ELOB", "NBEAL1", "NDUFA11", "S100A6", "ATP5MK", 
+	 "DYNLL1", "CSTA", "ATP5MC3", "NDUFC2", "PELATON", "FTH1", "FTL", "ARPC1B", "LGALS1" #cd4
+)
+
+addGene=c(	 "CXCL10", "GBP1", "GBP5", "IFIT2", "TNFSF10", "IFIT1", "IFIT3", "ISG15", "CXCL9", 
+	 "IDO1", "STAT1", "MX1", "CCL8", "TNFSF13B", "WARS1", "SAA1", "CALHM6", "VAMP5", 
+	 "ISG20", "IRF7", "CCL5", "GBP2", "IL4I1", "SLAMF7", "IRF1" # 25
+)
+
+addGene=c(	 "TYMS", "RRM2", "NUSAP1", "UBE2C", "STMN1", "H4C15", "HMGB2", "PCLAF", 
+	 "CTD-2116N17.1", "PHF19", "HMGN2", "ATAD2", "CKS2", "TMPO", "CENPU", "HS3ST4", 
+	 "CEP128", "PLP2", "HMGB1P5", "TUBA1B", "EZH2", "LMNB1", "THSD4", "FADS1", "POLA1" #30
+)
+
+addGene=c("LIPA", "RARRES1", "GPNMB", "PLA2G7", "MATK", "CHIT1", "SPARC", "APOE", "MMP9", "CTSK", "CHI3L1", "A2M", "LILRB4", "PLD3", "TREM2", "LGMN", "CSTB", "MGLL", "OTOA", "CD36", "NR1H3", "CD84", "CAPG", "CD9", "PLEK")
+
+addGene=c("KRT7", "S100A10", "KRT8", "KRT18", "TAGLN2", "CTSE", "ANXA2", "TNFRSF12A", "EMP3", "CD151", "TRAM1", "CRIP2", "TAGLN", "YWHAH", "ANXA3", "CST6", "IL32", "CALM2", "HSP90AA1", "MIR4435-2HG", "CAPG", "TUBA1B", "GKN2", "FSTL3", "TMSB4X")
+# cn17/30 epithelial woMC
+addGene=c("KRT7", "S100A10", "KRT8", "KRT18", "TAGLN2", "CTSE", "ANXA2", "TNFRSF12A", "EMP3", "CD151", "TRAM1", "CRIP2", "TAGLN", "YWHAH", "ANXA3", "CST6", "IL32", "CALM2", "HSP90AA1", "MIR4435-2HG", "CAPG", "TUBA1B", "GKN2", "FSTL3", "TMSB4X")
+# cn18/30 at only
+addGene=c("ANXA2", "KRT7", "KRT8", "KRT19", "PRSS23", "IL32", "S100A10", "HSPB1", "CTSE", "KRT18", "ACTG1", "TAGLN", "CD151", "LGALS1", "TAGLN2", "TACSTD2", "PKM", "TUBA1A", "CRIP2", "CD24", "CAPG", "TPM4", "EMP3", "PLP2", "YWHAH")
+# cn16 alveolar only abandon run 
+addGene=c("KRT17", "TAGLN", "CXCL14", "PRSS23", "SOX4", "CTSE", "MDK", "SLCO2A1", "RAB32", "TACSTD2", "TMSB10", "LBH", "MYL9", "MXRA8", "MMP7", "CLIC3", "CD151", "CDKN2B", "CD24", "NEXN", "TRAM1", "NME2", "RAB27B", "CLDN4", "TUBA1A")
+
+# Mm29 in myeloid over0
+
+addGene=c("GBP1", "CXCL10", "ISG15", "GBP5", "IFIT2", "IFIT3", "IFIT1", "STAT1", "EPSTI1", "MX1", "WARS1", "IFI44L", "TNFSF10", "CXCL9", "ISG20", "TNFSF13B", "VAMP5", "CALHM6", "IFITM3", "IRF7", "GBP2", "PLEK", "TNIP3", "SP110", "XAF1")
+
+# Mm3 in myeloid over0
+
+addGene=c("TMSB4X", "RAB5IF", "ATP5F1E", "SELENOH", "ATP5MG", "ATP5PO", "BLOC1S1", "GPX1", "NDUFA11", "ATP5MF", "NBEAL1", "ATP5MC3", "ELOB", "ATP5MK", "ARPC1B", "CSTB", "ATP5MJ", "ATP5ME", "NDUFC2", "FTH1", "DYNLL1", "S100A6", "CD63", "FTL", "PELATON")
+
+# TM4 in TNK over 0
+addGene=c("TNFAIP3", "ZFP36", "ZFP36L2", "TSC22D3", "KLF6", "CD69", "NFKBIA", "NFKBIZ", "BTG2", "SOCS1", "BTG1", "FOSB", "RGCC", "FOS", "PER1", "ZFAND5", "DUSP2", "AREG", "MCL1", "PPP1R15A", "FAM177A1", "DUSP1", "YPEL5", "DDX3Y", "KDM6B")
+# TM12 in TNK over 0
+addGene=c("DNAJB1", "HSP90AA1", "HSPE1", "HSPH1", "HSPB1", "HSPA8", "NR4A1", "ZFAND2A", "HSPD1", "JUN", "PPP1R15A", "DNAJA1", "HSP90AB1", "HSPA6", "DUSP1", "BAG3", "UBB", "CACYBP", "RHOB", "GADD45B", "NEU1", "DNAJB4", "BTG2", "ATF3", "FOSB")
+# TM8 in TNK over 0
+addGene=c("CD8A", "CD8B", "CCL5", "LIMD2", "GZMH", "GZMA", "IL32", "SH3BGRL3", "GIMAP4", "GZMK", "CD3E", "PSMB10", "PFN1", "CORO1A", "CD52", "IFITM1", "CNN2", "HCST", "NKG7", "COTL1", "CD3D", "UBE2V1", "ATP5MC2", "UCP2", "ACTB")
+# TM7 in TNK over 0
+addGene=c("CCL3", "CCL4", "XCL2", "NR4A2", "CCL4L2", "DUSP2", "IRF8", "IFNG", "XCL1", "ID2", "CD160", "NFKBID", "EGR2", "TRDC", "MAFF", "SLA", "KLRD1", "CHMP1B", "AMD1", "GZMB", "CMC1", "UBB", "PMAIP1", "SDCBP", "HOPX")
+# TM2 in TNK over 0
+addGene=c("PRF1", "SPON2", "FCGR3A", "NKG7", "CTSW", "FCER1G", "GNLY", "FGFBP2", "TYROBP", "CST7", "ITGB2", "CLIC3", "CD7", "TTC38", "CD247", "SH2D1B", "KLRF1", "S1PR5", "EFHD2", "AKR1C3", "FGR", "GZMA", "APMAP", "RAC2", "HOPX")
+
+
+
+addGene=unique(addGene)
+tbl_df = tbl_df[tbl_df$gene %in% addGene,]
+
+# HEatmap
+clu.name = unique(tbl_df$cluster)
+
+avglog2fc.df = pvals.df = matrix(nrow = length(unique(tbl_df$cluster)), ncol = length(addGene))
+rownames(avglog2fc.df) = rownames(pvals.df) = clu.name
+colnames(avglog2fc.df) = colnames(pvals.df) = addGene
+
+for (i in 1:nrow(avglog2fc.df))
+{
+  cat("\r", i)
+  for (j in 1:ncol(avglog2fc.df))
+  {
+    se = which(tbl_df$cluster == rownames(avglog2fc.df)[i] & tbl_df$gene == colnames(avglog2fc.df)[j])
+    if (length(se) == 0) {next}
+    avglog2fc.df[i,j] = tbl_df[se,"avg_log2FC"] 
+    pvals.df[i,j] = tbl_df[se, "p_val"]
+  }
+}
+
+avglog2fc.df = as.data.frame(avglog2fc.df)
+pvals.df = as.data.frame(pvals.df)
+
+
+pvals.df[pvals.df <= 0.01] <- "**"
+pvals.df[pvals.df > 0.01 & pvals.df <= 0.05] <- "*"
+pvals.df[is.na(pvals.df)] <- ""
+pvals.df[pvals.df > 0.05] <- ""
+
+
+
+range <- max(abs(avglog2fc.df), na.rm = T)
+
+avglog2fc.df[,names(which(sapply(avglog2fc.df, function(x)all(is.na(x)))))] <- NULL 
+pvals.df <- pvals.df[,colnames(avglog2fc.df)] # remove cols with all NAs
+
+library(pheatmap)
+
+
+
+avglog2fc.df=avglog2fc.df[-3,]
+pvals.df=pvals.df[-3,]
+
+
+file.path = projDir
+
+dir.create(file.path)
+Plot=pheatmap(avglog2fc.df, 
+         cluster_rows = F,
+         cluster_cols = F,
+         display_numbers = pvals.df, 
+         breaks = seq(-range, range, length.out = 100),  
+         cellheight=8,
+         cellwidth=8, 
+         color = colorRampPalette(c("navy", "white", "firebrick"))(100),
+         fontsize = 6,          
+         fontsize_row = 6,      
+         fontsize_col = 6)       )
+
+pdf(file = paste0(file.path, "muscat_heatmap_cpdb_lvl_2.5_v2_pbDS_min_cells",pbDS_min_cells,".pdf"), useDingbats = F, height = 12/6, width = 15/3)
+print(Plot)
+dev.off()
+
