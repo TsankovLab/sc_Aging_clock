@@ -769,3 +769,343 @@ projDir = 'output path'
 pdf (paste0(projDir,'/FIGURE_CXCLs_correlation_GTEX_lung_CXCL_Bulk_T_total_v2_Tcells.pdf'), width = 11/2, height = 5/5*2.5)
 print (wrap_plots (corr_res))
 dev.off() 
+####Supplements
+####Figure_S3A
+
+rm(list=ls())
+library(Seurat)
+library(patchwork)
+
+
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k_TNK.Rda"))
+# over 0 cells
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over0_TNK.Rda"))
+
+
+
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k_Myeloid.Rda"))
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over0_Myeloid.Rda"))
+
+srt=readRDS( file=".../hlca_full_pats_enrich_celltypes_No_Multiciliated_harmonized.rds")
+
+force=FALSE
+
+k_selections = c(5:30)
+
+
+nfeat = 3000
+cores= 100
+metacells = FALSE
+
+min_cells = 20 # default 100
+
+metacells_k = 40
+max_shared = 20
+metacells_groups = 'sample'
+
+cnmf_name='no_MetaCell_HLCA_Full_hvg_Myeloid_downsampled_normalized_over0'
+
+cnmf_name='no_MetaCell_HLCA_Full_hvg_TNK_downsampled_over0'
+
+
+
+library(harmony)
+library(viridis)
+library(ggpubr)
+library(ggplot2)
+library(RColorBrewer)
+library(fgsea)
+library(tidyr)
+library(dplyr)
+
+
+srt$age_info_60_old <- factor(srt$age_info_60_old, levels=c("Young","Intermediate","Old"))
+
+force=F
+nfeat = 3000
+k_list = c(5:30)
+k_selection = 30 
+top_nmf_genes=25 
+do.fgsea=TRUE 
+metacells= FALSE
+
+metaGroupNames = c('sample','CN','age_info_60_old')
+metaGroupNames = c('sample','CN','Age')
+metaGroupNames = c('sample','CN','Age',"age_info_60_old")
+metaGroupNames = c('sample','CN','Age',"age_info_60_old","cpdb_lvl_2.5_uniform_v3")
+metaGroupNames = c('sample','CN','Age',"age_info_60_old","cpdb_lvl_2.5_uniform_v4")
+
+
+source(".../useful_functions.R")
+
+
+org = 'human'
+
+reductionName="umap"
+
+if (!exists('cnmf_name')) cnmf_name = ''
+cnmf_out = paste0('cNMF_normalized/cNMF_',cnmf_name,'_',paste0(k_list[1],'_',k_list[length(k_list)]),'_vf',nfeat)
+dir.create (projdir, recursive=T)
+
+cnmf_spectra = read.table (paste0(cnmf_out,'/cnmf/cnmf.spectra.k_',k_selection,'.dt_0_3.consensus.txt'))
+
+
+vf = read.table (paste0(projdir,cnmf_out,'/vf',nfeat,'.txt'))[[1]]
+vf = gsub ('-','.',vf)
+if (all (vf == colnames(cnmf_spectra)))
+      {
+      vf = read.table (paste0(projdir,cnmf_out,'/vf',nfeat,'.txt'))[[1]]
+      colnames (cnmf_spectra) = vf
+      } else {
+      message ('WARNING variable features not in same order in the spectra file!')            
+      }
+
+cnmf_spectra = t(cnmf_spectra)
+max_spectra = apply (cnmf_spectra, 1, which.max)
+
+cnmf_spectra_nonunique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique) = paste0('CN',seq_along(cnmf_spectra_nonunique))
+
+cnmf_spectra_nonunique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[order(-cnmf_spectra[,x]),x,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_nonunique_full) = paste0('CN',seq_along(cnmf_spectra_nonunique_full))
+
+cnmf_spectra_unique = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      head(rownames(tmp),top_nmf_genes)
+      })
+names(cnmf_spectra_unique) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+cnmf_spectra_unique_full = lapply (1:ncol(cnmf_spectra), function(x) 
+      {
+      tmp = cnmf_spectra[names(max_spectra[max_spectra == x]),x,drop=F]
+      tmp = tmp[order(-tmp[,1]),,drop=F]
+      rownames(tmp)
+      
+      })
+names(cnmf_spectra_unique_full) = paste0('CN',seq_along(cnmf_spectra_unique))
+
+
+cnmf_spectra_nonunique
+
+
+ModScoreCor2 = function (seurat_obj, geneset_list, listName, cor_threshold = NULL, pos_threshold = .1, outdir)
+        {        
+        message ('Run AddModuleScore')
+        
+        seurat_obj = AddModuleScore (seurat_obj, geneset_list)
+        seurat_obj@meta.data = seurat_obj@meta.data[, !colnames (seurat_obj@meta.data) %in% names (geneset_list)]
+        colnames(seurat_obj@meta.data)[colnames(seurat_obj@meta.data) %in% paste0('Cluster',seq_along(geneset_list))] = names (geneset_list)
+        message (paste('Annotate cells based on highest module score and store in column:',paste0(listName, '_r',cor_threshold,'_max')))
+        if (length (geneset_list) == 1) 
+          {
+          seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = ifelse (seurat_obj@meta.data[,names (geneset_list)] > pos_threshold, 'pos','neg')
+          pdf (paste0(outdir, listName, '_modulescore_distribution_cor_threshold_',cor_threshold,'_score_',pos_threshold,'.pdf'))
+          hist (seurat_obj@meta.data[,names(geneset_list)])
+          abline (v = pos_threshold)
+          dev.off()
+          } else {
+          seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = sapply (seq_along(colnames(seurat_obj)), function(x) colnames(seurat_obj@meta.data[,names(geneset_list)])[which.max (seurat_obj@meta.data[x,names(geneset_list)])])           
+          }
+        if (!is.null(cor_threshold))
+                {
+                message ('cor_threshold provided! Filtering gene sets based on initial correlation to module score')  
+                filtered_geneset_list = list()
+                geneset_cor_list = list()
+                for (i in names(geneset_list))
+                        {       
+                        geneset_cor = cor (seurat_obj@meta.data[,i], as.matrix(t(seurat_obj@assays$RNA@data[rownames(seurat_obj@assays$RNA@data) %in% geneset_list[[i]],])))
+                        geneset_cor_list[[i]] = geneset_cor
+                        geneset_cor_names = colnames (geneset_cor)[geneset_cor > cor_threshold]
+                        geneset_cor_names = geneset_cor_names[!is.na (geneset_cor_names)]
+                        filtered_geneset_list[[i]] = geneset_cor_names
+                        }
+                if (!is.null (outdir)) 
+                        {
+                        lapply (seq_along(filtered_geneset_list), function(x) write.csv (filtered_geneset_list[[x]], paste0(outdir,'Corfiltered_Module_score_gene_list_', names(filtered_geneset_list)[x],'.csv')))
+                        pdf (paste0(outdir, listName, 'Corfiltered_modulescore_distribution.pdf'))
+                        lapply (seq_along(filtered_geneset_list), function(x) 
+                                {
+                                hist (geneset_cor_list[[x]], title = names(geneset_cor_list)[x])
+                                abline (v = cor_threshold)
+                                })
+                        dev.off()
+                        }
+                message ('Re-run AddModuleScore using corfiltered genes')
+                seurat_obj = AddModuleScore (seurat_obj, filtered_geneset_list, name = listName)
+                seurat_obj@meta.data = seurat_obj@meta.data[, !colnames (seurat_obj@meta.data) %in% paste0(names(geneset_list),'_r',cor_threshold)]
+                colnames(seurat_obj@meta.data)[colnames(seurat_obj@meta.data) %in% paste0('Cluster',seq_along(geneset_list))] = paste0(names(geneset_list),'_r',cor_threshold)
+                if (length (geneset_list) == 1) 
+                  {
+                  seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = ifelse (seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)] > pos_threshold, 'pos','neg')
+                  pdf (paste0(outdir, listName, '_modulescore_distribution_cor_threshold_',cor_threshold,'_score_',pos_threshold,'.pdf'))
+                  hist (seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)])
+                  abline (v = pos_threshold)
+                  dev.off()
+                  } else {
+                  seurat_obj@meta.data[, paste0(listName, '_r',cor_threshold,'_max')] = sapply (seq_along(colnames(seurat_obj)), function(x) colnames(seurat_obj@meta.data[,paste0(names(geneset_list),'_r',cor_threshold)])[which.max (seurat_obj@meta.data[x,paste0(names(geneset_list),'_r',cor_threshold)])])        
+                  }
+                }
+        return (seurat_obj)
+        } 
+
+
+cnmf_spectra_nonunique
+
+message ('test AddModuleScore: top25')
+flag <- TRUE
+tryCatch(srt <- AddModuleScore(srt, features = cnmf_spectra_nonunique), error = function(e) flag <<-FALSE)
+if (!flag) {print(paste0("Skipping ",  names(obj.subtype.list[1])))}
+if (!flag) {
+  i=i+1
+} else {
+  srt = ModScoreCor2 (
+        seurat_obj = srt, 
+        geneset_list = cnmf_spectra_nonunique, 
+        cor_threshold = NULL, 
+        pos_threshold = NULL, # threshold for fetal_pval2
+        listName = 'CN', outdir = paste0(projdir,'Plots/'))
+}
+
+
+srt$CN = 'CN'
+ccomp_df = srt@meta.data[,c(names(cnmf_spectra_nonunique), metaGroupNames), drop=FALSE]
+library(ComplexHeatmap)
+library(circlize)
+library(dplyr)
+library(tidyr)
+library(reshape2)
+
+
+cn_columns <- ccomp_df %>% select(starts_with("CN"))
+
+non_numeric_cols <- cn_columns %>% 
+  summarise(across(everything(), ~any(!is.numeric(.)))) %>% 
+  pivot_longer(everything(), names_to = "column", values_to = "non_numeric") %>% 
+  filter(non_numeric)
+
+print(non_numeric_cols)
+
+
+ccomp_df$CN=NULL
+
+ccomp_df$LTforUnknown_ann_finest_level=ccomp_df[,metaGroupNames[5]]
+
+sample_level_data <- ccomp_df %>%
+  select(starts_with("CN"), sample, Age, LTforUnknown_ann_finest_level) %>%
+  group_by(sample, Age, LTforUnknown_ann_finest_level) %>%
+  dplyr::summarise(across(starts_with("CN"), sum, na.rm = TRUE), .groups = 'drop')
+
+
+
+cor_results <- sample_level_data %>%
+  group_by(LTforUnknown_ann_finest_level) %>%
+
+                   list(cor = ~cor.test(., Age, method = "spearman")$estimate,
+                        pval = ~cor.test(., Age, method = "spearman")$p.value),
+                   .names = "{.col}_{.fn}")) %>%
+  mutate(across(ends_with("_pval"), ~p.adjust(., method = "fdr")))
+
+cor_data <- cor_results %>%
+  pivot_longer(cols = -LTforUnknown_ann_finest_level, names_to = c("CN", ".value"), 
+               names_pattern = "(CN\\d+)_(cor|pval)")
+
+
+cor_data_cor <- cor_data %>%
+  select(LTforUnknown_ann_finest_level, CN, cor)
+
+cor_data_pval <- cor_data %>%
+  select(LTforUnknown_ann_finest_level, CN, pval)
+
+# Step 2: Pivot wider ensuring unique row identifiers
+cor_matrix <- cor_data_cor %>%
+  pivot_wider(names_from = CN, values_from = cor) %>%
+  as.data.frame()
+
+pval_matrix <- cor_data_pval %>%
+  pivot_wider(names_from = CN, values_from = pval) %>%
+  as.data.frame()
+
+rownames(cor_matrix) <- paste(cor_matrix$LTforUnknown_ann_finest_level, seq_len(nrow(cor_matrix)), sep = "_")
+rownames(pval_matrix) <- paste(pval_matrix$LTforUnknown_ann_finest_level, seq_len(nrow(pval_matrix)), sep = "_")
+
+cor_matrix <- cor_matrix %>% select(-LTforUnknown_ann_finest_level)
+pval_matrix <- pval_matrix %>% select(-LTforUnknown_ann_finest_level)
+
+cor_matrix <- as.matrix(cor_matrix)
+pval_matrix <- as.matrix(pval_matrix)
+
+
+heatmapAnnotation <- function(j, i, x, y, w, h, fill) {
+    if(abs(cor_matrix[i, j]) != 0) {  # Customize the threshold for significance
+        if(pval_matrix[i, j] < 0.01) {
+            grid::grid.text("**", x, y)
+        } else if(pval_matrix[i, j] < 0.05) {
+            grid::grid.text("*", x, y)
+        }
+    }
+}
+
+
+p_heatmap <- ComplexHeatmap::Heatmap(cor_matrix, 
+                                     name = "Spearman Correlation",
+                                     col = colorRamp2(c(-1, 0, 1), c("blue", "white", "red")),
+                                     cluster_rows = FALSE, 
+                                     cluster_columns = FALSE, 
+                                     row_names_gp = grid::gpar(fontsize = 6),  
+                                     column_names_gp = grid::gpar(fontsize = 6),  
+                                     heatmap_legend_param = list(
+                                       title_gp = grid::gpar(fontsize = 6),  
+                                       labels_gp = grid::gpar(fontsize = 6) 
+                                     ),
+                                     rect_gp = grid::gpar(col = "white", lwd = 2),
+                                     cell_fun = heatmapAnnotation)
+
+
+projDir=projdir
+
+    
+    
+                         
+    pdf(file = file.path(projDir,cnmf_out,  
+                         
+                         paste("/Composition_analysis_spearman_hlca_",metaGroupNames[5], "_TNK_both.pdf", sep = ".")),
+                        
+        width = 12/5.5, 
+        height = 1.5) 
+    
+    print(p_heatmap)
+    dev.off()
+
+
+####Figure_S3B
+rm(list=ls())
+library(ggplot2)
+library(Seurat)
+library(dplyr)
+library(Matrix)
+require(muscat) 
+require(limma)
+library(SingleCellExperiment)
+library(scater) 
+library(ggrepel)
+library(patchwork)
+library(tidyr)
+library(fgsea) 
+require(GO.db) 
+require(org.Hs.eg.db) 
+library(RColorBrewer)
+library(argparse)
+require (muscat)
+library(muscat)
+require (limma)
+library(SingleCellExperiment)
