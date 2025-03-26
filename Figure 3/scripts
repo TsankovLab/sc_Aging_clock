@@ -1346,3 +1346,21 @@ pdf(file = paste0(file.path, "muscat_heatmap_cpdb_lvl_2.5_v2_pbDS_min_cells",pbD
 print(Plot)
 dev.off()
 
+####Figure_S3C
+
+#similar to fig3D
+h [['MHC_II_GENES']]=list(c("HLA-DMA","HLA-DMB","HLA-DOB","HLA-DOA","HLA-DPA1","HLA-DPB1","HLA-DQA1","HLA-DQA2","HLA-DQB1","HLA-DQB2","HLA-DRA","HLA-DRB1","HLA-DRB5","CD74"))
+
+h [['MHC_I_GENES']]=list(c("HLA-A","HLA-B","HLA-C","HLA-E","HLA-F","HLA-G"))
+
+
+
+####Figure_S3D
+
+#similar to fig2G
+
+top.genes[["LRP6"]] ='LRP6'
+modules="LRP6"
+
+####Figure_S3E-F
+##@@@ you already have them i think?
