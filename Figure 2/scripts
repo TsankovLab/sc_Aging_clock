@@ -964,3 +964,164 @@ pdf(paste0(figures.dir.sub, "/",gsub(" ","_",res),"_module_score_analyses_with_a
     dev.off()
 
 }
+
+
+#######Supplements
+
+####Figure_S2A
+
+#similar to Fig3A with this object
+srt=readRDS(file=".../hlca_full_pats_enrich_celltypes_No_Multiciliated.rds")
+
+Alveolar=subset(srt,idents=c("AlveolarEpithelial"))
+Airway=subset(srt,idents=c("AirwayEpithelial"))
+
+
+####Figure_S2B
+
+
+#similar to Fig3B but with CNMF 18 
+
+#check the supplemental table for CNMF genes
+
+
+####Figure_S2C&F
+
+
+srt <- get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed_over1k.Rda"))
+figures.dir = "..."
+srt_tam=srt
+
+library(hash)
+h=hash()
+h["Basaloid_paper"]=list(c("CDKN2A","CCND1","GDF15","FN1","KRT17","TP63","LAMB3","LAMC2","VIM","CDH2","COL1A1","TNC","HMGA2","CCND2","MDM2","COX2","MMP7","EPHB2"))
+h["PATS_paper"]=list(c("KRT8","CLDN4","FN1","SFN","CCN2","CLU","ACTN1","LGALS3","SOX4","KRT19","CSRP1","S100A14","CLDN18"))
+h["KRT8_ADI_paper"]=list(c("KRT8","CLDN4","SPRR1A","NDRG1","TP53","MDM2","CDKN1A","HIF1A","CASP3","IRF7","CXCL16"))
+h["DATPS_paper"]=list(c("CDKN2A","CCND1","GDF15","CLDN4","KRT8","SPRR1A","AREG","PLAUR","HBEGF","ZHNIT3","EDN1"))
+
+gene_list=list()
+
+genes_PATs <- c("KRT8","CLDN4","FN1","SFN","CCN2","CLU","ACTN1","LGALS3","SOX4","KRT19","CSRP1","S100A14","CLDN18")
+
+genes_EM14 <- c("ANXA2", "KRT19", "KRT8", "KRT7", "CTSE", "PRSS23", "IL32", "S100A10", "ACTG1", "KRT18", "HSPB1", "TAGLN2", "CD151", "PKM", "TAGLN", "TACSTD2", "TUBA1A", "LGALS1", "CRIP2", "CAPG", "PLP2", "TPM4", "PFN1", "CD24", "YWHAH")  # Replace with actual EM14 genes
+
+genes_Basaloid <- c("CDKN2A","CCND1","GDF15","FN1","KRT17","TP63","LAMB3","LAMC2","VIM","CDH2","COL1A1","TNC","HMGA2","CCND2","MDM2","COX2","MMP7","EPHB2")
+genes_EM18 <- c("BCAM", "GSTO1", "IGFBP7", "TP63", "KRT15", "STING1", "IFITM1", "JUNB", "IFITM3", "DLK2", "IFITM2", "PTPRZ1", "IFI16", "CBR1", "EFEMP1", "C1R", "LIMA1", "IL33", "PIK3R1", "ALDH3A2", "PCP4L1", "LTBP4", "COL7A1", "C1S", "CHL1")
+
+
+pattern <- "genes_EM"
+matched_vars1 <- grep(pattern, ls(), value = TRUE)
+matched_vars=matched_vars1
+
+srt_tam <- AddModuleScore(srt_tam, features = list(genes_PATs), name = "PATs_Score")
+srt_tam <- AddModuleScore(srt_tam, features = list(genes_EM14), name = "EM14_Score")
+
+srt_tam <- AddModuleScore(srt_tam, features = list(genes_Basaloid), name = "Basaloid_Score")
+srt_tam <- AddModuleScore(srt_tam, features = list(genes_EM18), name = "EM18_Score")
+
+for (var in(1:length(matched_vars))) {
+    tmp <- get(matched_vars[var])
+srt_tam <- AddModuleScore(srt_tam, features = list(tmp), name = paste0(matched_vars[var],"_Score"))
+    
+}
+
+module_scores_df <- srt_tam@meta.data[, c("PATs_Score1", "EM14_Score1", "sample", "age_info_60_old")]
+#module_scores_df <- srt_tam@meta.data[, c("Basaloid_Score1", "EM14_Score1", "sample", "age_info_60_old")]
+
+module_scores_summary=module_scores_df
+
+
+library(ggpubr)
+
+head(module_scores_summary)
+module_scores_summary$PATs_Score1 <- as.numeric(module_scores_summary$PATs_Score1)
+module_scores_summary$EM14_Score1 <- as.numeric(module_scores_summary$EM14_Score1)
+module_scores_summary$Basaloid_Score1 <- as.numeric(module_scores_summary$Basaloid_Score1)
+
+cor_res <- cor.test(module_scores_summary$PATs_Score1, module_scores_summary$EM14_Score1, method = "spearman")  
+cor_res <- cor.test(module_scores_summary$Basaloid_Score1, module_scores_summary$EM14_Score1, method = "spearman")  
+
+levels <- c('Young', 'Intermediate', 'Old')
+palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+module_scores_summary$age_info_60_old <- factor(module_scores_summary$age_info_60_old, levels = levels)
+gtheme <- theme_minimal()
+module_scores_summary$age_info_60_old <- factor(
+  module_scores_summary$age_info_60_old, 
+  levels = c("young", "intermediate", "old")  
+)
+
+palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+plot <- ggscatter(
+  data = module_scores_summary,
+  
+  y = "EM14_Score1",
+  x = "Basaloid_Score1",
+  
+  shape = 16,
+  size = 0.0000001,
+  color = "age_info_60_old",  
+  cor.coef = TRUE,
+  cor.method = "spearman",  
+  
+  ylab = "EM14 Module Score",
+  xlab = "Basaloid Module Score",
+ 
+  fullrange = TRUE
+) +
+geom_smooth(method = "lm", se = FALSE, color = "black") +  
+scale_color_manual(values = palette) +  
+gtheme +
+theme(
+  plot.title = element_text(size = 6),
+  axis.title = element_text(size = 6),
+  axis.text = element_text(size = 6),
+  legend.title = element_text(size = 6),
+  legend.text = element_text(size = 6)
+)+theme_void()+theme(legend.position="none")+ggtitle(NULL)
+ggsave(paste0(figures.dir, "Figures_scatterplot&_HLCA_QC__vs__NewVersion_.pdf"), width=2*2, height=2*2, dpi=500)
+
+
+library(ggExtra)
+library(patchwork)
+
+plot =  ggMarginal(plot, type = "density", groupColour = TRUE, groupFill = TRUE)
+
+
+####Figure_S2D
+
+#similar to FIG2G
+#substitute "TP53" with Gene_ID
+srt=readRDS(file=".../hlca_full_pats_enrich_celltypes_No_Multiciliated.rds")
+
+####Figure_S2E
+
+#similar to FIG2D and 2B part2
+srt=readRDS(file="/ahg/regevdata/projects/ICA_Lung/Isha/Aging_lung/Module_score_analysis/hlca_full_pats_enrich_celltypes_No_Multiciliated.rds")
+
+h["Basaloid_paper"]=list(c("CDKN2A","CCND1","GDF15","FN1","KRT17","TP63","LAMB3","LAMC2","VIM","CDH2","COL1A1","TNC","HMGA2","CCND2","MDM2","COX2","MMP7","EPHB2"))
+h["PATS_paper"]=list(c("KRT8","CLDN4","FN1","SFN","CCN2","CLU","ACTN1","LGALS3","SOX4","KRT19","CSRP1","S100A14","CLDN18"))
+h["KRT8_ADI_paper"]=list(c("KRT8","CLDN4","SPRR1A","NDRG1","TP53","MDM2","CDKN1A","HIF1A","CASP3","IRF7","CXCL16"))
+h["DATPS_paper"]=list(c("CDKN2A","CCND1","GDF15","CLDN4","KRT8","SPRR1A","AREG","PLAUR","HBEGF","ZHNIT3","EDN1"))
+
+####Figure_S2F
+
+#similar to S2C
+
+
+####Figure_S2G
+
+#similar to fig2G 
+top.genes[["LRP6"]] ='LRP6'
+modules="LRP6"
+
+
+####Figure_S2H
+#similar to fig1I
+normal <- get(load(file = ".../GTex.normal.lung.UniqueGeneID.Rda"))
+
+top.genes[["WNT5A"]] ='WNT5A'
+modules="WNT5A"
+
+top.genes[["WNT7B"]] ='WNT7B'
+modules="WNT7B"
+
