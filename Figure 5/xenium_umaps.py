@@ -18,6 +18,23 @@ from __paths__ import *
 
 ScanpyConfig.figdir = Path(FIG_DIR)
 
+# all cells
 mdata = ad.read_h5ad(os.path.join(OBJ_DIR, 'xenium.h5ad'))
 sc.pl.umap(mdata, color='celltype_final', palette=CELLTYPE_PALETTE, show=False, save='_celltype.png')
 sc.pl.umap(mdata, color='donor_id', show=False, save='_donor.png')
+
+# epithelial cells
+mdata = ad.read_h5ad(os.path.join(OBJ_DIR, 'epithelial_xenium.h5ad'))
+sc.pl.umap(mdata, color='celltype_final', palette=CELLTYPE_PALETTE, show=False, save='_epithelial.png')
+
+# stromal cells
+mdata = ad.read_h5ad(os.path.join(OBJ_DIR, 'stromal_xenium.h5ad'))
+sc.pl.umap(mdata, color='celltype_final', palette=CELLTYPE_PALETTE, show=False, save='_stromal.png')
+
+# myeloid cells
+mdata = ad.read_h5ad(os.path.join(OBJ_DIR, 'myeloid_xenium.h5ad'))
+sc.pl.umap(mdata, color='celltype_final', palette=CELLTYPE_PALETTE, show=False, save='_myeloid.png')
+
+# lymphoid cells
+mdata = ad.read_h5ad(os.path.join(OBJ_DIR, 'lymphoid_xenium.h5ad'))
+sc.pl.umap(mdata, color='celltype_final', palette=CELLTYPE_PALETTE, show=False, save='_lymphoid.png')
