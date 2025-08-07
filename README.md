@@ -21,25 +21,25 @@ Please find the required file for installation in the main repository named "Agi
 
 ### Single cell
 Here is the link to download the single-cell dataset:  
-[Single_cell data](https://cellxgene.cziscience.com/collections/6f6d381a-7701-4781-935c-db10d30de293)
+[Single_cell data](https://cellxgene.cziscience.com/collections/6f6d381a-7701-4781-935c-db10d30de293).
 
 You can find the code to create the single cell object in the [data folder](https://github.com/TsankovLab/sc_Aging_clock/tree/main/Data).
 
 ### Bulk data      
 Here is the link to download the bulk dataset:  
-[GTEx data](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression) 
+[GTEx data](https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression).
   
 You can find the code to create the GTEx object in the [data folder](https://github.com/TsankovLab/sc_Aging_clock/tree/main/Data).
 
 ### PBMCs  
 
 Here is the link to download the PBMC data:  
-[PBMC data](https://www.synapse.org/Synapse:syn49637038/files/)   
+[PBMC data](https://www.synapse.org/Synapse:syn49637038/files/).
    
 You can find the code to create the PBMC object in the [data folder](https://github.com/TsankovLab/sc_Aging_clock/tree/main/Data).
 
 ### Spatial (10x Xenium)
 Here is the link to download files required to reproduce the figures:
-[Spatial data](https://drive.google.com/file/d/17qEP3kDs6POwiAmpuCiz_zlYfWXNfiCr/view?usp=sharing)
+[Spatial data](https://drive.google.com/file/d/17qEP3kDs6POwiAmpuCiz_zlYfWXNfiCr/view?usp=sharing).
 
 Download and extract the `Spatial` folder in `Data` folder.
