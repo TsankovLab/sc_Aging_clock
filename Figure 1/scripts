@@ -40,7 +40,120 @@ srt <- RunHarmony(srt, c("dataset","sample","X3._or_5." ))
 srt <- RunUMAP(srt, reduction = "harmony", dim=1:15)
 save ="output path...Ke_HLCA_notNormalized_harmonized_dataset_sample_over1K.Rda"
 
+#####Figure_1b & extended Figure_1a
+srt=get(load(file="HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+meta_data=srt@meta.data
+library(ColorBrewer)
+continuous_palette <- rev(brewer.pal(n = 7, name = "RdBu"))
+threecolors=c("#0091CA", "#D3D3D3", "#D8423D")
+continuous_palette <- rep(threecolors, times = c(3, 2, 2))
+meta_data <- srt@meta.data
 
+meta_data$Age <- as.numeric(meta_data$Age)
+
+breaks <- c(0, 20, 30, 40, 50, 60, 70, 81)
+
+labels=c("18-19","20-29","30-39","40-49","50-59","60-69","70-80")
+
+meta_data$age_decade <- cut(meta_data$Age, 
+                            breaks = breaks, 
+                            # breaks = seq(0, 90, by = 10), 
+                            labels = labels,
+                            # labels = paste(seq(10, 90, by = 10)),
+                            include.lowest = TRUE)
+
+
+sample_count_per_decade <- meta_data %>%
+  distinct(sample, age_decade) %>%  # Ensure each sample is counted only once per decade
+  group_by(age_decade) %>%
+  summarise(sample_count = n(), .groups = "drop")  # Count unique samples
+
+
+meta_data$age_decade_numeric <- as.factor(as.character(meta_data$age_decade))
+sample_count_per_decade <- meta_data %>%
+  distinct(sample, age_decade, age_decade_numeric) %>%  # Keep numeric version
+  group_by(age_decade, age_decade_numeric) %>%
+  summarise(sample_count = n(), .groups = "drop")
+
+
+library(ggplot2)
+pdf(file=paste0(figures.dir,"/HLCA_full_all_histogram_for_age_using_sample_by10.pdf"),
+
+
+his=ggplot(sample_count_per_decade, aes(x = age_decade, y = sample_count, fill = age_decade_numeric)) +
+  geom_bar(stat = "identity") +
+  theme_classic()+
+  scale_fill_manual(
+    values = continuous_palette)+
+  labs(title = "Sample Distribution Across Age Groups",
+       x = "Age Groups",
+       y = "Lung Samples Counts") +
+  theme(
+    text = element_text(size = 6),  # Set font size for all text
+    axis.text = element_text(size = 6),
+    axis.title = element_text(size = 6),
+    plot.title = element_text(size = 6, face = "bold"),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6),
+    axis.text.x = element_text()
+  )
+
+
+his
+dev.off()
+
+
+#@@@@@@@@@@@@@@@@ eversmokoing
+
+meta_data <- srt@meta.data
+
+sample_sex_data <- meta_data %>%
+  distinct(sample, eversmoking) %>%  # Ensure each sample is counted only once
+  group_by(eversmoking) %>%
+  summarise(sample_count = n(), .groups = "drop") %>%
+  mutate(percentage = (sample_count / sum(sample_count)) * 100)  # Calculate percentage
+
+
+sample_sex_data$label <- paste0(sample_sex_data$eversmoking, "\n", 
+                                "n=", sample_sex_data$sample_count, "\n", 
+                                round(sample_sex_data$percentage, 1), "%")
+
+sample_sex_data$eversmoking <- factor(sample_sex_data$eversmoking, 
+                                   levels = c("no", "yes", "unknown"))
+
+# Save plot as PDF
+pdf(file=paste0(figures.dir,"/Sample_eversmoking_Distribution.pdf"),
+  height=sqrt((unique(14)))-2,
+  width=log((2))+1.5)
+dev.off() 
+
+
+#@@@@@@@@@@@@@@@@ ethinicity
+
+meta_data <- srt@meta.data
+
+sample_sex_data <- meta_data %>%
+  distinct(sample, ethnicity) %>%  # Ensure each sample is counted only once
+  group_by(ethnicity) %>%
+  summarise(sample_count = n(), .groups = "drop") %>%
+  mutate(percentage = (sample_count / sum(sample_count)) * 100)  # Calculate percentage
+
+# Create labels for pie chart (including n= and percentage)
+sample_sex_data$label <- paste0(sample_sex_data$ethnicity, "\n", 
+                                "n=", sample_sex_data$sample_count, "\n", 
+                                round(sample_sex_data$percentage, 1), "%")
+
+sample_sex_data$ethnicity <- factor(sample_sex_data$ethnicity, 
+                                   levels = c("unknown","asian", "black","latino","white", "mixed"))
+
+# Save plot as PDF
+pdf(file=paste0(figures.dir,"/Sample_ethnicity_Distribution.pdf"),
+  height=sqrt((unique(16)))-2,
+  width=log((2))+1.5)
+
+
+dev.off() 
+####Figure_1c
 figures.dir = "figures path" 
 metaGroupNames_list = c("cpdb_lvl_2.5_uniform_v3")
 #Cell_type_umap
@@ -139,7 +252,7 @@ dev.off()
 
 }
 
-#Figure_1C_Boxplots
+#Figure_1D_Boxplots
 
 
 composition_analysis <- function(compartment_seurat_object, category_meta, category_idents, out_dir, refined_label_meta, sampleID_meta, name,number=NULL) {
@@ -232,7 +345,7 @@ composition_analysis(
 
 
 
-#Figure_1D_Heatmap_Age_association
+#Figure_1E_Heatmap_Age_association
 
 
 bulk <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
@@ -718,7 +831,7 @@ dir.create(projDir)
     dev.off()
 
 
-#Figure_1E
+#Figure_1F
 
 
 table(srt$cpdb_lvl_2.5_uniform_v2)
@@ -938,7 +1051,7 @@ expression_regression_model(obj=srt, category_meta_col='Age', tag= "lollipop", o
 
 
 
-#Figure_1F
+#Figure_1G
 
 
 normal <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
@@ -1056,7 +1169,7 @@ cowplot::plot_grid(plotlist = mean.plots, ncol=4)
 dev.off() 
 
 
-#Figure_1G
+#Figure_1H
 
 
 srt=get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
@@ -1338,7 +1451,7 @@ dot_plot
 dev.off()
 
 
-#Figure_1H
+#Figure_1I
 
 
 srt <- get(load(file="data path/HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
@@ -1542,7 +1655,194 @@ print(file_path)
 expression_regression_model(obj=srt, category_meta_col='Age', tag= "lollipop", out_dir = "output path")
 
 
-#Figure_1I
+
+refined_label_meta <- 'cpdb_lvl_2.5_uniform_v3'
+sampleID_meta <- 'sample'
+gene_name = c()
+
+gene_name = c("UBE2C", "TOP2A","CCNB2", "CDK1","MKI67")
+
+names(gene_name)="hexa"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="hexa"
+
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+gene_set <- gene_list[[1]]
+
+# extract matrix (RNA assay, data slot)
+mat <- obj@assays$RNA@data
+
+# confirm genes exist
+genes_present <- intersect(gene_set, rownames(mat))
+if(length(genes_present) == 0){
+    stop("None of the genes in gene_name exist in RNA assay.")
+}
+
+# average expression per cell
+avg_expr_per_cell <- Matrix::colMeans(mat[genes_present, , drop = FALSE])
+
+# attach to metadata
+obj$GeneSet_AvgExpression <- avg_expr_per_cell
+head(obj$GeneSet_AvgExpression)
+# --- Aggregate by cell type × sample ---
+aggregate_data <- aggregate(
+    obj$GeneSet_AvgExpression,
+    by = list(
+        cell_type = obj@meta.data[, refined_label_meta],
+        sample    = obj@meta.data[, sampleID_meta]
+    ),
+    FUN = mean
+)
+
+colnames(aggregate_data)[3] <- "x"
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr') #editable
+
+    # Convert NA in p_vals to 1
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    # Convert NA in gradients to 0
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+    png(paste0(out_dir, category_meta_col, '_', tag, "_avgexpression_lollipop_test_wFDRall_mean.png"), height = 800, width = 800)
+    print(figs)
+    dev.off()
+
+    pdf(paste0(out_dir, category_meta_col, '_', tag, "_avgexpression_lollipop_test_wFDRall_mean.pdf"), height = 6, width = 8)
+    print(figs)
+    dev.off()
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "_subtype_expression_model_output_wFDRall_mean.csv"), row.names = FALSE)
+}
+obj = srt
+category_meta_col='Age'
+tag = "G2M"
+expression_regression_model(obj=srt, category_meta_col='Age', tag= "UBE2C_TOP2A_CCNB2_CDK1_MKI67", out_dir = "...")
+
+
+
+
+#Figure_1J
 
 
 normal <- get(load(file = "data path/GTex.normal.lung.UniqueGeneID.Rda"))
@@ -1646,6 +1946,101 @@ pdf(paste0(projDir,module_name,"_modules_deconvolution_v2_reproduced.pdf"), widt
 cowplot::plot_grid(plotlist = mean.plots, ncol=4)
 dev.off() 
 
+
+gene_name = c("UBE2C", "TOP2A","CCNB2", "CDK1" ,"MKI67")
+
+#names(gene_name)="JasonCore_SASP"
+
+names(gene_name)="penta"
+ 
+
+gene_list=gene_name
+names(gene_list)=gene_list
+top.genes<-list()
+top.genes[["penta"]] = gene_name
+modules="penta"
+
+data.type<-''
+
+input.df <- as.matrix(log10(GetAssayData(normal,slot='counts')+1))
+
+rownames(input.df)<-rownames(GetAssayData(normal,slot='counts'))
+
+exprs.ave.list<-list()
+
+
+for (i in 1:length(modules)){
+  
+  markers<-toupper(top.genes[[i]])
+  module_name<-modules[i]
+  print(module_name)
+  index<-which(rownames(input.df) %in% markers)
+  print(length(index))
+  exprs<-input.df[index,, drop = F]
+  rownames(exprs)<-rownames(input.df)[index]
+  
+  if (length(index) == 1){
+    exprs.ave.list[[i]]<-exprs
+    print("boop1")
+  }
+  else if (length(index) > 1){
+    exprs.ave.list[[i]]<-colMeans(exprs)
+    print("boop2")
+  }
+  else {exprs.ave.list[[i]]<-NA
+  print("boop3")
+  print(module_name)}
+}
+
+modules<-modules[which(!is.na(exprs.ave.list))]
+top.genes<-top.genes[which(!is.na(exprs.ave.list))]
+exprs.ave.list[which(is.na(exprs.ave.list))]<-NULL
+names(exprs.ave.list)<-paste0(modules,data.type)
+exprs.ave.df<-as.data.frame(t(do.call(rbind,exprs.ave.list)))
+
+
+tmp<-cbind(normal@meta.data, exprs.ave.df)
+
+tmp$age_trio <- factor(tmp$age_trio, levels = c("<40", "40-59", ">=60"))
+colnames(tmp)
+#colnames(tmp)[72] <- paste0(colnames(tmp)[72], "_")
+#modules <- paste0(modules, "_")
+
+library(ggpubr)
+library(ggplot2)
+mean.plots <- list()
+
+my_comparisons <- list( c("young", "intermed"), c("intermed", "old"), c("young", "old"))
+my_comparisons <- list( c("<40", "40-59"), c("40-59", ">=60"), c("<40", ">=60"))
+
+tmp <- tmp[!is.na(tmp$age_trio),]
+
+for (module in modules){
+  print(paste0(module, "_"))
+  
+  mean.plot <- ggboxplot(tmp, x = "age_trio", y = module,
+                         color = "age_trio", palette = c("#0091CA","gray","#D8423D"),
+                         title = module) +
+    
+    stat_compare_means(comparisons = my_comparisons,p.adjust.method = "fdr") +
+    
+    
+    theme(plot.title = element_text(size = 12, face = "bold")) 
+  
+  mean.plots[[module]] <- mean.plot
+}
+
+
+
+
+module_name="penta"
+
+height_factor=max(1,length(modules)/4)
+projDir <- "..."
+
+pdf(paste0(projDir,module_name,"_modules_deconvolution_v2_reproduced.pdf"), width = 2.5*4, height = 5*height_factor, useDingbats=FALSE)
+cowplot::plot_grid(plotlist = mean.plots, ncol=4)
+dev.off() 
 
 ########supplements
 ####Figure_S1A
