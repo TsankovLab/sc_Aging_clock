@@ -19,36 +19,42 @@ ifelse(!dir.exists(file.path('figures')),
         dir.create(file.path('figures')),
         "")
 
-cellprop <- readRDS('../Data/Spatial/cellprop.rds')
-
-heatmap_matrix = cellprop[['weights']]
-annot_matrix = cellprop[['annotations']]
-
-color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
-
-heatmapAnnotation <- function(i, j, x, y, w, h, fill) {
-    grid.text(annot_matrix[i, j], x, y, gp = gpar(fontsize = 10), rot=90)
+save_heatmap <- function(df, fig_path){
+    heatmap_matrix = df[['weights']]
+    annot_matrix = df[['annotations']]
+    
+    color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+    
+    heatmapAnnotation <- function(i, j, x, y, w, h, fill) {
+        grid.text(annot_matrix[i, j], x, y, gp = gpar(fontsize = 10), rot=90)
+    }
+    p_heatmap <- Heatmap(
+        t(as.matrix(heatmap_matrix)), 
+        cluster_rows = FALSE, 
+        cluster_columns = FALSE, 
+        name = "-log10p",
+        col = color_mapping,
+        
+        row_names_gp = grid::gpar(fontsize = 6),
+        column_names_gp = grid::gpar(fontsize = 6),
+        
+        heatmap_legend_param = list(
+        title_gp = gpar(fontsize = 6),
+        labels_gp = gpar(fontsize = 6)
+        ),
+        
+        rect_gp = grid::gpar(col = "white", lwd = 2),
+        
+        cell_fun = heatmapAnnotation
+    )
+    
+    pdf(fig_path, width = 4, height = 2)
+    draw(p_heatmap)
+    dev.off()
 }
-p_heatmap <- Heatmap(
-    t(as.matrix(heatmap_matrix)), 
-    cluster_rows = FALSE, 
-    cluster_columns = FALSE, 
-    name = "-log10p",
-    col = color_mapping,
-    
-    row_names_gp = grid::gpar(fontsize = 6),
-    column_names_gp = grid::gpar(fontsize = 6),
-    
-    heatmap_legend_param = list(
-    title_gp = gpar(fontsize = 6),
-    labels_gp = gpar(fontsize = 6)
-    ),
-    
-    rect_gp = grid::gpar(col = "white", lwd = 2),
-    
-    cell_fun = heatmapAnnotation
-)
 
-pdf("figures/cellprop.pdf", width = 4, height = 2)
-draw(p_heatmap)
-dev.off()
+cellprop <- readRDS('../Data/Spatial/cellprop.rds')
+save_heatmap(cellprop, 'figures/fig5e_exfig6d_cellprop_uncorrected.pdf')
+
+cellprop_corrected <- readRDS('../Data/Spatial/cellprop_corrected.rds')
+save_heatmap(cellprop_corrected, 'figures/exfig6d_cellprop_corrected.pdf')

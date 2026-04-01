@@ -6,7 +6,7 @@
 
 * Creation Date : 04-28-2025
 
-* Last Modified : Mon 28 Apr 2025 01:49:44 PM EDT
+* Last Modified : Wed 01 Apr 2026 09:16:34 AM EDT
 
 * Created By : Atharva Bhagwat
 
@@ -19,7 +19,7 @@ from scipy.stats import wilcoxon
 
 os.makedirs(FIG_DIR, exist_ok=True)
 
-files = {'cxcl9': 'cxcl9_neigh_prox.pkl', 'cxcl10': 'cxcl10_neigh_prox.pkl', 'cxcl9_merged_t': 'cxcl9_merged_t_neigh_prox.pkl', 'cxcl10_merged_t': 'cxcl10_merged_t_neigh_prox.pkl'}
+files = {'fig5g_cxcl9': 'cxcl9_neigh_prox.pkl', 'exfig6f_cxcl10': 'cxcl10_neigh_prox.pkl', 'exfig6e_cxcl9_merged_t': 'cxcl9_merged_t_neigh_prox.pkl', 'exfig6f_cxcl10_merged_t': 'cxcl10_merged_t_neigh_prox.pkl'}
 
 for tag, f in files.items():
     pkl = pickle.load(open(os.path.join(OBJ_DIR, f), 'rb'))
@@ -36,7 +36,7 @@ for tag, f in files.items():
                 "*" if pval <= 0.05 else
                 "")
             max_val = np.nanmax(df)
-    
+
             fig, ax = plt.subplots(1, 1, figsize=(1, 1))
             sns.boxplot(df, showcaps=False, flierprops={"marker": ""}, linewidth=1.1, fill=False, width=0.8, palette=CXCL_PALETTE)
             sns.stripplot(df, palette=CXCL_PALETTE, size=1)

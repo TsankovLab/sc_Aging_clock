@@ -6,7 +6,7 @@
 
 * Creation Date : 05-27-2025
 
-* Last Modified : Tue 27 May 2025 03:53:30 PM EDT
+* Last Modified : Wed 01 Apr 2026 09:24:38 AM EDT
 
 * Created By : Atharva Bhagwat
 
@@ -26,7 +26,7 @@ df = pd.read_csv(os.path.join(OBJ_DIR, 'niche_cellprop_by_age.csv'), index_col=0
 plt.figure(figsize=(3, 3))
 df.T.plot(kind='bar', stacked=True, color=['#d7433b', '#1091c8'])
 plt.ylabel('Percentage')
-plt.savefig(os.path.join(FIG_DIR, 'niche_young_old.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5i_niche_young_old.pdf'), bbox_inches='tight')
 plt.close()
 
 niche_boxplots = pickle.load(open(os.path.join(OBJ_DIR, 'niche_boxplots.pkl'), 'rb'))
@@ -50,7 +50,6 @@ label = (
         "*" if pval <= 0.05 else
         "")
 
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
 fig, ax = plt.subplots(1, 1, figsize=(3, 3))
 sns.boxplot(icam1_dc, x='prop_type', y='score', order=[left_key, right_key], palette=NICHE_PROP, showcaps=False, flierprops={'marker': ''}, linewidth=1.1, fill=False, width=0.5)
 xcoor_l = 0
@@ -61,7 +60,7 @@ ul = max_val + max_val/50
 ax.text(xcoor, ul, label, horizontalalignment='center', verticalalignment='bottom', **{'fontsize':8})
 ax.plot([xcoor_l, xcoor_r], [ul, ul], '-|', color='black', linewidth=0.8)
 plt.title('ICAM1+ DC proportion')
-plt.savefig(os.path.join(FIG_DIR, 'icam1_dc_niche.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5k_icam1_dc_niche.pdf'), bbox_inches='tight')
 plt.close()
 
 # DC prop
@@ -84,7 +83,6 @@ label = (
         "*" if pval <= 0.05 else
         "")
 
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
 fig, ax = plt.subplots(1, 1, figsize=(3, 3))
 sns.boxplot(dc, x='prop_type', y='score', order=[left_key, right_key], palette=NICHE_PROP, showcaps=False, flierprops={'marker': ''}, linewidth=1.1, fill=False, width=0.5)
 xcoor_l = 0
@@ -95,7 +93,7 @@ ul = max_val + max_val/50
 ax.text(xcoor, ul, label, horizontalalignment='center', verticalalignment='bottom', **{'fontsize':8})
 ax.plot([xcoor_l, xcoor_r], [ul, ul], '-|', color='black', linewidth=0.8)
 plt.title('DC proportion')
-plt.savefig(os.path.join(FIG_DIR, 'dc_niche.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5k_dc_niche.pdf'), bbox_inches='tight')
 plt.close()
 
 # niche heatmap
@@ -108,6 +106,6 @@ _ = sp.pl.show_celltype_niche_heatmap(
     cmap='BuGn',
     title='r50 k30',
     figsize=(20, 16),
-    save=os.path.join(FIG_DIR, 'niche_heatmap.pdf'),
+    save=os.path.join(FIG_DIR, 'fig5h_niche_heatmap.pdf'),
     **{'vmin':0, 'vmax':0.75}
 )

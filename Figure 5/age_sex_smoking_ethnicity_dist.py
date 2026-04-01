@@ -6,7 +6,7 @@
 
 * Creation Date : 04-28-2025
 
-* Last Modified : Thu 29 May 2025 02:51:39 PM EDT
+* Last Modified : Wed 01 Apr 2026 09:13:39 AM EDT
 
 * Created By : Atharva Bhagwat
 
@@ -43,7 +43,7 @@ sns.barplot(
 plt.xlabel("Age")
 plt.ylabel("Sample counts")
 plt.title("Xenium cohort age distribution")
-plt.savefig(os.path.join(FIG_DIR, 'xenium_age_distribution.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5a_xenium_age_distribution.pdf'), bbox_inches='tight')
 plt.close()
 
 # sex distribution
@@ -72,7 +72,7 @@ for idx, column in enumerate(sex_df.columns):
                 color='black'
             )
         cumulative_height += value
-plt.savefig(os.path.join(FIG_DIR, 'xenium_sex_distribution.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5a_xenium_sex_distribution.pdf'), bbox_inches='tight')
 plt.close()
 
 # smoking + ethnicity distribution
@@ -104,5 +104,5 @@ for idx, col in enumerate(df.index):
                 color='black'
             )
         cumulative_height += value
-plt.savefig(os.path.join(FIG_DIR, 'xenium_smoking_ethnicity_distribution.pdf'), bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig5a_xenium_smoking_ethnicity_distribution.pdf'), bbox_inches='tight')
 plt.show()
