@@ -255,94 +255,210 @@ dev.off()
 #Figure_1D_Boxplots
 
 
-composition_analysis <- function(compartment_seurat_object, category_meta, category_idents, out_dir, refined_label_meta, sampleID_meta, name,number=NULL) {
-    obj <- compartment_seurat_object
- 
-    # Get sampleIDs for each ident
-    for (i in 1:length(category_idents)){
-        assign(paste0('cat', i), unique(obj@meta.data[,sampleID_meta][obj@meta.data[,category_meta] == category_idents[i]]))
+composition_analysis <- function(compartment_seurat_object,
+                                 category_meta,
+                                 category_idents,
+                                 out_dir,
+                                 refined_label_meta,
+                                 sampleID_meta,
+                                 name,
+                                 number = NULL) {
+  obj <- compartment_seurat_object
+
+  Dout <- prop.table(
+    table(obj@meta.data[, refined_label_meta],
+          obj@meta.data[, sampleID_meta]),
+    2
+  )
+
+  subtypes <- rownames(Dout)
+  plots <- list()
+
+  for (subtype in subtypes) {
+    message(subtype)
+    df_list <- vector("list", length(category_idents))
+
+    for (i in seq_along(category_idents)) {
+      cid <- category_idents[i]
+
+      samples_i <- unique(
+        obj@meta.data[, sampleID_meta][obj@meta.data[, category_meta] == cid]
+      )
+
+      samples_i <- intersect(samples_i, colnames(Dout))
+      frac_i <- as.vector(Dout[subtype, samples_i])
+
+      df_list[[i]] <- data.frame(
+        Status   = cid,
+        Fraction = frac_i,
+        ID       = samples_i,
+        stringsAsFactors = FALSE
+      )
     }
- 
-    Dout <- prop.table(table(obj@meta.data[,refined_label_meta], obj@meta.data[,sampleID_meta]), 2)
-    subtypes <- unique(obj@meta.data[,refined_label_meta])
-    plots <- list()
-    for (subtype in subtypes) {
-        print(subtype)
-        df_vector <- list()
-        for (i in 1:length(category_idents)){
- 
-            eval(parse(text = paste0('cat',i)))
- 
-            assign(paste0('class', i), as.vector(Dout[subtype, eval(parse(text = paste0('cat',i)))]))
-            assign(paste0('df.', i), data.frame("Status" = category_idents[i], "Fraction" = eval(parse(text = paste0("class",i))),"ID" = eval(parse(text = paste0('cat',i)))))
-            df_vector[[i]] <- eval(parse(text = paste0('df.', i)))
-        }
-        df <- do.call(rbind, df_vector)
- 
-        my_comparisons <- combn(category_idents, 2, simplify = FALSE)
-        palette <- c("#0091CA", "#D3D3D3", "#D8423D")
- 
-        df$Status <- factor(df$Status, levels = category_idents)
- 
- 
-        # Plotting
-        plot <- ggplot(df, aes(x = Status, y = Fraction, color = Status)) +
-                geom_boxplot(size = 0.5, outlier.shape = NA, fatten = 1.5) +
-                geom_jitter(width = 0.25, size = 0.3, stroke = 0.1) +
-                scale_color_manual(values = palette) +
-                theme_minimal() +
-                theme(
-                    text = element_text(size = 6, colour = "black"),
-                    plot.title = element_text(size = 6, hjust = 0.5, margin = margin(t = -1.5)),
-                    axis.line = element_line(linewidth = 0.3, colour = "black"),
-                    axis.text.x = element_text(angle = 0, hjust = 0.5, colour = "black", margin = margin(t = -1.5)),
-                    axis.text.y = element_text(angle = 0, colour = "black", margin = margin(r = -1)),
-                    panel.grid.major = element_blank(),
-                    panel.grid.minor = element_blank(),
-                    legend.position = "none"
-                ) +
-                labs(y = "Fraction", x = "") +
-                # scale_x_discrete(labels = category_idents) +
-                scale_x_discrete(labels = c("<40", "40-59", expression(">=60"))) +
-                # stat_compare_means(comparisons = my_comparisons, method = "wilcox.test", label = "p.format", p.adjust = 'bonferroni', size = 2) +
-                stat_compare_means(comparisons = my_comparisons, method = "wilcox.test", label = "p.format", p.adjust = 'fdr', size = 2) +
-                ggtitle(subtype)
- 
-        plots[[subtype]] <- plot
- 
-        
-        pdf(paste0(out_dir, "/", paste0(name, "_", subtype, ".pdf")), width=1.1, height=1.7)
-        print(plot)
-        dev.off()
-    }
-    if((number%%4)>0 & number > round(number/4)*4){
-    value=round(number/4)+1
+
+    df <- do.call(rbind, df_list)
+    my_comparisons <- combn(category_idents, 2, simplify = FALSE)
+    palette <- c("#0091CA", "#D3D3D3", "#D8423D")
+
+    df$Status <- factor(df$Status, levels = category_idents)
+
+    pdat_list <- lapply(seq_along(my_comparisons), function(k) {
+      comp <- my_comparisons[[k]]
+      g1 <- comp[1]
+      g2 <- comp[2]
+
+      x1 <- df$Fraction[df$Status == g1]
+      x2 <- df$Fraction[df$Status == g2]
+
+      if (length(x1) < 1 || length(x2) < 1 ||
+          all(is.na(x1)) || all(is.na(x2))) {
+        p <- NA_real_
+      } else {
+        p <- tryCatch(
+          stats::wilcox.test(x1, x2)$p.value,
+          error = function(e) NA_real_
+        )
+      }
+
+      data.frame(group1 = g1, group2 = g2, p = p)
+    })
+
+    if (length(pdat_list) == 0) {
+      pdat <- data.frame(
+        group1 = character(0),
+        group2 = character(0),
+        p      = numeric(0)
+      )
     } else {
-        value=round(number/4)
+      pdat <- do.call(rbind, pdat_list)
     }
-    while (!is.null(dev.list())) dev.off()
-    pdf(paste0(out_dir, "/",name, "_", category_meta, "_composition_analysis_boxplotover1k.pdf"), 1.1*4, 1.7*value, useDingbats = FALSE)
-    print(cowplot::plot_grid(plotlist = plots, ncol = 4))
+
+    max_y_data <- max(df$Fraction, na.rm = TRUE)
+    if (!is.finite(max_y_data) || max_y_data == 0) max_y_data <- 1
+
+    y_upper <- max_y_data
+
+    if (nrow(pdat) > 0) {
+      pdat$p_adj <- stats::p.adjust(pdat$p, method = "fdr")
+      pdat$label <- vapply(pdat$p_adj, p_to_stars, character(1))
+      pdat <- pdat[!is.na(pdat$label), , drop = FALSE]
+
+      if (nrow(pdat) > 0) {
+        lvl <- levels(df$Status)
+        pdat$x_start <- match(pdat$group1, lvl)
+        pdat$x_end   <- match(pdat$group2, lvl)
+        pdat$x_mid   <- (pdat$x_start + pdat$x_end) / 2
+
+        step <- 0.07 * max_y_data
+        if (!is.finite(step) || step == 0) step <- 0.07
+
+        pdat$y_pos <- max_y_data + step * seq_len(nrow(pdat))
+        y_upper <- max(y_upper, max(pdat$y_pos, na.rm = TRUE))
+      }
+    }
+
+    y_upper <- y_upper * 1.05
+
+    plot <- ggplot(df, aes(x = Status, y = Fraction, color = Status)) +
+      geom_boxplot(size = 0.5, outlier.shape = NA, fatten = 1.5) +
+      geom_jitter(width = 0.25, size = 0.3, stroke = 0.1) +
+      scale_color_manual(values = palette) +
+      theme_minimal() +
+      theme(
+        text = element_text(size = 6, colour = "black"),
+        plot.title = element_text(size = 6, hjust = 0.5,
+                                  margin = margin(t = -1.5)),
+        axis.line = element_line(linewidth = 0.3, colour = "black"),
+        axis.text.x = element_text(angle = 0, hjust = 0.5,
+                                   colour = "black",
+                                   margin = margin(t = -1.5)),
+        axis.text.y = element_text(angle = 0, colour = "black",
+                                   margin = margin(r = -1)),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(y = "Fraction", x = "") +
+      scale_x_discrete(labels = c("<40", "40-59", expression(">=60"))) +
+      scale_y_continuous(
+        limits = c(0, y_upper),
+        expand = expansion(mult = c(0, 0.02))
+      ) +
+      ggtitle(subtype)
+
+    if (nrow(pdat) > 0) {
+      plot <- plot +
+        geom_segment(
+          data = pdat,
+          aes(x = x_start, xend = x_end, y = y_pos, yend = y_pos),
+          inherit.aes = FALSE,
+          linewidth = 0.3
+        ) +
+        geom_segment(
+          data = pdat,
+          aes(x = x_start, xend = x_start,
+              y = y_pos - 0.01 * y_pos, yend = y_pos + 0.01 * y_pos),
+          inherit.aes = FALSE,
+          linewidth = 0.3
+        ) +
+        geom_segment(
+          data = pdat,
+          aes(x = x_end, xend = x_end,
+              y = y_pos - 0.01 * y_pos, yend = y_pos + 0.01 * y_pos),
+          inherit.aes = FALSE,
+          linewidth = 0.3
+        ) +
+        geom_text(
+          data = pdat,
+          aes(x = x_mid, y = y_pos, label = label),
+          inherit.aes = FALSE,
+          size = 2,
+          fontface = "bold",
+          vjust = -0.3
+        )
+    }
+
+    plots[[subtype]] <- plot
+
+    pdf(file.path(out_dir, paste0(name, "_", subtype, ".pdf")),
+        width = 1.1, height = 1.7)
+    print(plot)
     dev.off()
+  }
+
+  if (is.null(number)) {
+    number <- length(plots)
+  }
+
+  if ((number %% 4) > 0 & number > round(number / 4) * 4) {
+    value <- round(number / 4) + 1
+  } else {
+    value <- round(number / 4)
+  }
+
+  while (!is.null(dev.list())) dev.off()
+
+  pdf(file.path(out_dir,
+                paste0(name, "_", category_meta,
+                       "_composition_analysis_boxplotover1k.pdf")),
+      width = 1.1 * 4, height = 1.7 * value, useDingbats = FALSE)
+  print(cowplot::plot_grid(plotlist = plots, ncol = 4))
+  dev.off()
 }
- 
-highlevel = srt
-Idents(highlevel)="ann_level_1"
-highlevel2=subset(x = highlevel, subset = ann_level_1 == "Immune", invert=FALSE) 
-#highlevel2=immune
- 
+
+highlevel <- srt
+Idents(highlevel) <- "ann_level_1"
+highlevel3 <- subset(highlevel, idents = "Immune")
 
 composition_analysis(
-                        compartment_seurat_object = highlevel3,
-                        category_meta = "age_info_60_old",
-                        category_idents = c("Young", "Intermediate", "Old"),
-                        out_dir <- "output path",
-                        refined_label_meta = "cpdb_lvl_2.5_uniform_v3",
-                        sampleID_meta = "sample",
-                        name = 'age_cpdb_lvl_2.5_uniform_FDR_corrected'
-                        )
-
-
+  compartment_seurat_object = highlevel3,
+  category_meta             = "age_info_60_old",
+  category_idents           = c("Young", "Intermediate", "Old"),
+  out_dir                   = "results/plots/raw_boxplots",
+  refined_label_meta        = "cpdb_lvl_2.5_uniform_v2",
+  sampleID_meta             = "sample",
+  name                      = "age_cpdb_lvl_2.5_uniform_FDR_corrected"
+)
 
 
 #Figure_1E_Heatmap_Age_association
@@ -2693,3 +2809,601 @@ aggregate_data=aggregate_dataX
 }
 
 expression_regression_model(obj=srt, category_meta_col='Age', tag="SenMayo", out_dir = "...") 
+
+
+### Figure 1E - CLR adjusted
+
+clr_transform <- function(mat, pseudocount = 1e-6) {
+  mat2 <- mat + pseudocount
+  log_mat <- log(mat2)
+  row_means <- rowMeans(log_mat)
+  sweep(log_mat, 1, row_means, "-")
+}
+
+results_dir <- "results"
+if (!dir.exists(results_dir)) {
+  dir.create(results_dir, recursive = TRUE)
+}
+
+bulk <- get(load(file = "/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/GTEx_normal_bulk_RNA/GTex.normal.lung.UniqueGeneID.Rda"))
+modules_df <- read.csv("/sc/arion/projects/Tsankov_Normal_Lung/users/kex07/GTEx_normal_bulk_RNA/LungCellMarkersFv4_match_HLCA_cpdb_lvl2.5_uniform_v3_add_Tcells.csv")
+
+colnames(modules_df)[1] <- "cluster"
+modules_df <- modules_df[modules_df$Annotation != "T.cells", ]
+top10genes <- modules_df %>% dplyr::group_by(cluster)
+top.genes <- list()
+modules <- unique(modules_df$cluster)
+
+for (i in seq_along(modules)) {
+  name <- modules[i]
+  genes <- as.character(top10genes$gene[which(top10genes$cluster %in% (i - 1))])
+  top.genes[[name + 1]] <- genes
+}
+
+modules <- unique(modules_df$Annotation)
+input.df <- as.matrix(log10(Seurat::GetAssayData(bulk, slot = "counts") + 1))
+rownames(input.df) <- rownames(Seurat::GetAssayData(bulk, slot = "counts"))
+
+exprs.ave.list <- list()
+for (i in seq_along(modules)) {
+  markers <- toupper(top.genes[[i]])
+  module_name <- modules[i]
+  message("Bulk module: ", module_name)
+  index <- which(rownames(input.df) %in% markers)
+  exprs <- input.df[index, , drop = FALSE]
+  rownames(exprs) <- rownames(input.df)[index]
+  if (length(index) == 1) {
+    exprs.ave.list[[i]] <- exprs
+  } else if (length(index) > 1) {
+    exprs.ave.list[[i]] <- colMeans(exprs)
+  } else {
+    exprs.ave.list[[i]] <- NA
+    message("No markers found for module: ", module_name)
+  }
+}
+
+names(exprs.ave.list) <- modules
+modules <- modules[which(!is.na(exprs.ave.list))]
+top.genes <- top.genes[which(!is.na(exprs.ave.list))]
+exprs.ave.list[which(is.na(exprs.ave.list))] <- NULL
+
+exprs.ave.df <- as.data.frame(t(do.call(rbind, exprs.ave.list)))
+bulk$age_trio <- "intermed"
+bulk$age_trio[bulk$AGE == "20-29"] <- "young"
+bulk$age_trio[bulk$AGE == "30-39"] <- "young"
+bulk$age_trio[bulk$AGE == "60-69"] <- "old"
+bulk$age_trio[bulk$AGE == "70-79"] <- "old"
+bulk$age_trio[is.na(bulk$AGE)] <- NA
+
+tmp <- cbind(bulk@meta.data, exprs.ave.df)
+controlling <- FALSE
+model_input <- tmp[, c(modules, "AGE")]
+model_input <- model_input[stats::complete.cases(model_input[, c("AGE")]), ]
+
+model_input$Age_numeric <- NA_real_
+model_input$Age_numeric[model_input$AGE == "20-29"] <- 24.5
+model_input$Age_numeric[model_input$AGE == "30-39"] <- 34.5
+model_input$Age_numeric[model_input$AGE == "40-49"] <- 44.5
+model_input$Age_numeric[model_input$AGE == "50-59"] <- 54.5
+model_input$Age_numeric[model_input$AGE == "60-69"] <- 64.5
+model_input$Age_numeric[model_input$AGE == "70-79"] <- 74.5
+
+model_input$Age_numeric <- as.numeric(model_input$Age_numeric)
+model_input[is.na(model_input)] <- 0
+
+bulk_mat <- as.matrix(model_input[, modules, drop = FALSE])
+row_sums_bulk <- rowSums(bulk_mat)
+row_sums_bulk[row_sums_bulk == 0] <- 1
+prob_bulk <- sweep(bulk_mat, 1, row_sums_bulk, "/")
+clr_bulk <- clr_transform(prob_bulk)
+model_input_clr <- model_input
+model_input_clr[, modules] <- clr_bulk
+
+Age_model <- function(df) {
+  if (controlling == TRUE) {
+    stop("Controlling model not implemented for CLR in this script.")
+  } else {
+    final_model_results <- list()
+    j <- 1
+    for (key in modules) {
+      model2 <- stats::cor.test(df$Age_numeric, df[[key]], method = "spearman")
+      p_val <- model2$p.value
+      final_model_results[[j]] <- list(model2, key, p_val)
+      j <- j + 1
+    }
+    return(final_model_results)
+  }
+}
+
+model_out <- Age_model(model_input_clr)
+out_df <- as.data.frame(do.call(rbind, model_out))
+colnames(out_df) <- c("V1", "Name", "P_value")
+
+out_df$P_value <- stats::p.adjust(out_df$P_value, method = "fdr")
+
+Directed_P_Values <- c()
+for (row in seq_len(nrow(out_df))) {
+  est <- out_df$V1[[row]]$estimate[1]
+  p   <- out_df$P_value[row]
+  dir_p_val <- p * sign(est)
+  Directed_P_Values <- append(Directed_P_Values, dir_p_val)
+}
+Directed_P_Values <- unname(Directed_P_Values)
+out_df$Directed_P_Value <- Directed_P_Values
+out_df$V1 <- NULL
+
+out_df$Significance <- "temp"
+out_df$Significance[out_df$P_value > 0.05] <- "Not Significant"
+out_df$Significance[out_df$P_value < 0.05] <- "Significant"
+out_df$direction <- "temp"
+out_df$direction[out_df$Directed_P_Value > 0] <- "positive correlation"
+out_df$direction[out_df$Directed_P_Value < 0] <- "negative correlation"
+
+out_df$Name    <- as.character(unlist(out_df$Name))
+out_df$P_value <- unlist(out_df$P_value)
+out_df$Directed_P_Value <- unlist(out_df$Directed_P_Value)
+out_df$Significance <- unlist(out_df$Significance)
+out_df$direction <- unlist(out_df$direction)
+
+out_df$log_pval <- -log10(out_df$P_value)
+out_df$directed_log_pval <- sign(out_df$Directed_P_Value) * out_df$log_pval
+out_df$direction[out_df$P_value >= 0.05] <- "not_sig"
+
+bulk_df <- out_df
+bulk_df$Source <- "GTEx"
+
+# -------------------------------------------------------------------
+# IMMUNE HLCA (CLR)
+# -------------------------------------------------------------------
+
+sampleID_meta <- "sample"
+obj <- srt
+category_meta_col <- "age"
+Seurat::Idents(srt) <- "ann_level_1"
+refined_label_meta <- "cpdb_lvl_2.5_uniform_v3"
+
+Immune <- subset(srt, idents = c("Immune"))
+obj <- Immune
+sampleID <- obj$sample
+Age <- as.numeric(obj$Age)
+df <- data.frame(sampleID, Age)
+rownames(df) <- NULL
+df <- dplyr::distinct(df)
+rownames(df) <- df$sampleID
+
+Dout <- t(prop.table(
+  table(obj@meta.data[, refined_label_meta],
+        obj@meta.data[, sampleID_meta]),
+  2
+))
+df2 <- as.data.frame.matrix(Dout)
+df <- df[match(rownames(Dout), rownames(df)), ]
+
+prob_imm <- as.matrix(df2)
+clr_imm <- clr_transform(prob_imm)
+clr_imm_df <- as.data.frame(clr_imm)
+colnames(clr_imm_df) <- colnames(df2)
+final_imm <- cbind(df, clr_imm_df)
+
+model <- function(df, subtype_names, dependant_var) {
+  final_model_results <- list()
+  j <- 1
+  for (subtype in subtype_names) {
+    model2 <- stats::cor.test(df$Age, df[[subtype]], method = "spearman")
+    p_val <- model2$p.value
+    final_model_results[[j]] <- list(model2, subtype, p_val)
+    j <- j + 1
+  }
+  return(final_model_results)
+}
+
+model_matrix_input <- model(
+  df = final_imm,
+  subtype_names = unique(obj@meta.data[, refined_label_meta]),
+  dependant_var = category_meta_col
+)
+
+if (is.character(model_matrix_input)) {
+  stop("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+}
+
+p_vals <- c()
+names_vec <- c()
+gradients <- c()
+for (i in seq_along(model_matrix_input)) {
+  p_val <- model_matrix_input[[i]][[3]][1]
+  name <- model_matrix_input[[i]][[2]][1]
+  gradient <- model_matrix_input[[i]][[1]]$estimate[1]
+  p_vals <- append(p_vals, p_val)
+  names_vec <- append(names_vec, name)
+  gradients <- append(gradients, gradient)
+}
+
+out_df_immune <- data.frame(
+  names = names_vec,
+  p_vals = p_vals,
+  gradients = gradients
+)
+
+out_df_immune$p_vals <- stats::p.adjust(out_df_immune$p_vals, method = "fdr")
+out_df_immune$Significance <- "temp"
+out_df_immune$Significance[out_df_immune$p_vals > 0.05] <- "Not Significant"
+out_df_immune$Significance[out_df_immune$p_vals < 0.05] <- "Significant"
+
+directed_p_value <- c()
+for (row in seq_len(nrow(out_df_immune))) {
+  if (out_df_immune[row, "gradients"] < 0) {
+    directed_p_value <- append(directed_p_value, (-1 * out_df_immune[row, "p_vals"]))
+  } else {
+    directed_p_value <- append(directed_p_value, (out_df_immune[row, "p_vals"]))
+  }
+}
+out_df_immune$directed_p_value <- directed_p_value
+out_df_immune$direction <- "temp"
+out_df_immune$direction[out_df_immune$gradients > 0] <- "positive correlation"
+out_df_immune$direction[out_df_immune$gradients < 0] <- "negative correlation"
+out_df_immune$log_pval <- -log10(out_df_immune$p_vals)
+out_df_immune$directed_log_pval <- sign(out_df_immune$directed_p_value) * out_df_immune$log_pval
+out_df_immune$direction[out_df_immune$p_vals >= 0.05] <- "not_sig"
+hlca_df_immune <- out_df_immune
+final_imm_raw <- cbind(df, prob_imm)
+
+model_raw_immune <- model(
+  df = final_imm_raw,
+  subtype_names = unique(obj@meta.data[, refined_label_meta]),
+  dependant_var = category_meta_col
+)
+
+p_vals_raw <- c(); names_vec_raw <- c(); gradients_raw <- c()
+for (i in seq_along(model_raw_immune)) {
+  p_vals_raw    <- c(p_vals_raw,    model_raw_immune[[i]][[3]][1])
+  names_vec_raw <- c(names_vec_raw, model_raw_immune[[i]][[2]][1])
+  gradients_raw <- c(gradients_raw, model_raw_immune[[i]][[1]]$estimate[1])
+}
+
+hlca_immune_raw <- data.frame(
+  Name          = names_vec_raw,
+  P_value_raw   = p_vals_raw,
+  gradients_raw = gradients_raw
+)
+
+hlca_immune_raw$P_value_raw <- stats::p.adjust(hlca_immune_raw$P_value_raw, method = "fdr")
+
+hlca_immune_raw$Directed_P_Value_raw <-
+  hlca_immune_raw$P_value_raw * sign(hlca_immune_raw$gradients_raw)
+
+hlca_immune_raw$log_pval_raw          <- -log10(hlca_immune_raw$P_value_raw)
+hlca_immune_raw$directed_log_pval_raw <- sign(hlca_immune_raw$Directed_P_Value_raw) *
+                                         hlca_immune_raw$log_pval_raw
+
+Nonimmune <- subset(srt, idents = c("Immune"), invert = TRUE)
+obj <- Nonimmune
+sampleID <- obj$sample
+Age <- as.numeric(obj$Age)
+df <- data.frame(sampleID, Age)
+rownames(df) <- NULL
+df <- dplyr::distinct(df)
+rownames(df) <- df$sampleID
+
+Dout <- t(prop.table(
+  table(obj@meta.data[, refined_label_meta],
+        obj@meta.data[, sampleID_meta]),
+  2
+))
+df2 <- as.data.frame.matrix(Dout)
+df <- df[match(rownames(Dout), rownames(df)), ]
+
+prob_non <- as.matrix(df2)
+clr_non <- clr_transform(prob_non)
+clr_non_df <- as.data.frame(clr_non)
+colnames(clr_non_df) <- colnames(df2)
+final_non <- cbind(df, clr_non_df)
+
+model_matrix_input <- model(
+  df = final_non,
+  subtype_names = unique(obj@meta.data[, refined_label_meta]),
+  dependant_var = category_meta_col
+)
+
+if (is.character(model_matrix_input)) {
+  stop("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+}
+
+p_vals <- c()
+names_vec <- c()
+gradients <- c()
+for (i in seq_along(model_matrix_input)) {
+  p_val <- model_matrix_input[[i]][[3]][1]
+  name <- model_matrix_input[[i]][[2]][1]
+  gradient <- model_matrix_input[[i]][[1]]$estimate[1]
+  p_vals <- append(p_vals, p_val)
+  names_vec <- append(names_vec, name)
+  gradients <- append(gradients, gradient)
+}
+
+out_df_nonimmune <- data.frame(
+  names = names_vec,
+  p_vals = p_vals,
+  gradients = gradients
+)
+
+out_df_nonimmune$p_vals <- stats::p.adjust(out_df_nonimmune$p_vals, method = "fdr")
+out_df_nonimmune$Significance <- "temp"
+out_df_nonimmune$Significance[out_df_nonimmune$p_vals > 0.05] <- "Not Significant"
+out_df_nonimmune$Significance[out_df_nonimmune$p_vals < 0.05] <- "Significant"
+
+directed_p_value <- c()
+for (row in seq_len(nrow(out_df_nonimmune))) {
+  if (out_df_nonimmune[row, "gradients"] < 0) {
+    directed_p_value <- append(directed_p_value, (-1 * out_df_nonimmune[row, "p_vals"]))
+  } else {
+    directed_p_value <- append(directed_p_value, (out_df_nonimmune[row, "p_vals"]))
+  }
+}
+out_df_nonimmune$directed_p_value <- directed_p_value
+out_df_nonimmune$direction <- "temp"
+out_df_nonimmune$direction[out_df_nonimmune$gradients > 0] <- "positive correlation"
+out_df_nonimmune$direction[out_df_nonimmune$gradients < 0] <- "negative correlation"
+out_df_nonimmune$log_pval <- -log10(out_df_nonimmune$p_vals)
+out_df_nonimmune$directed_log_pval <- sign(out_df_nonimmune$directed_p_value) * out_df_nonimmune$log_pval
+out_df_nonimmune$direction[out_df_nonimmune$p_vals >= 0.05] <- "not_sig"
+hlca_df_nonimmune <- out_df_nonimmune
+final_non_raw <- cbind(df, prob_non)
+
+model_raw_nonimm <- model(
+  df = final_non_raw,
+  subtype_names = unique(obj@meta.data[, refined_label_meta]),
+  dependant_var = category_meta_col
+)
+
+p_vals_raw <- c(); names_vec_raw <- c(); gradients_raw <- c()
+for (i in seq_along(model_raw_nonimm)) {
+  p_vals_raw    <- c(p_vals_raw,    model_raw_nonimm[[i]][[3]][1])
+  names_vec_raw <- c(names_vec_raw, model_raw_nonimm[[i]][[2]][1])
+  gradients_raw <- c(gradients_raw, model_raw_nonimm[[i]][[1]]$estimate[1])
+}
+
+hlca_nonimm_raw <- data.frame(
+  Name            = names_vec_raw,
+  P_value_raw     = p_vals_raw,
+  gradients_raw   = gradients_raw
+)
+
+hlca_nonimm_raw$P_value_raw <- stats::p.adjust(hlca_nonimm_raw$P_value_raw, method = "fdr")
+
+hlca_nonimm_raw$Directed_P_Value_raw <-
+  hlca_nonimm_raw$P_value_raw * sign(hlca_nonimm_raw$gradients_raw)
+
+hlca_nonimm_raw$log_pval_raw          <- -log10(hlca_nonimm_raw$P_value_raw)
+hlca_nonimm_raw$directed_log_pval_raw <- sign(hlca_nonimm_raw$Directed_P_Value_raw) *
+                                         hlca_nonimm_raw$log_pval_raw
+
+hlca_df <- rbind(hlca_df_immune, hlca_df_nonimmune)
+
+names(hlca_df) <- sub("names", "Name", names(hlca_df))
+names(hlca_df) <- sub("p_vals", "P_value", names(hlca_df))
+names(hlca_df) <- sub("directed_p_value", "Directed_P_Value", names(hlca_df))
+
+model_input_raw <- model_input
+model_input_raw[, modules] <- prob_bulk
+
+model_out_raw <- Age_model(model_input_raw)
+
+out_df_raw <- tibble::tibble(
+  Name         = vapply(
+    model_out_raw,
+    function(x) as.character(x[[2]][1]),
+    character(1)
+  ),
+  P_value_raw  = vapply(
+    model_out_raw,
+    function(x) as.numeric(x[[3]][1]),
+    numeric(1)
+  ),
+  gradient_raw = vapply(
+    model_out_raw,
+    function(x) as.numeric(x[[1]]$estimate[1]),
+    numeric(1)
+  )
+)
+
+out_df_raw$Name <- as.character(out_df_raw$Name)
+
+out_df_raw$P_value_raw <- stats::p.adjust(out_df_raw$P_value_raw, method = "fdr")
+
+out_df_raw$Directed_P_Value_raw <-
+  out_df_raw$P_value_raw * sign(out_df_raw$gradient_raw)
+
+out_df_raw$log_pval_raw          <- -log10(out_df_raw$P_value_raw)
+out_df_raw$directed_log_pval_raw <- sign(out_df_raw$Directed_P_Value_raw) *
+                                    out_df_raw$log_pval_raw
+bulk_df$Name <- as.character(bulk_df$Name)
+
+bulk_df <- dplyr::left_join(
+  bulk_df,
+  out_df_raw[, c("Name", "P_value_raw", "Directed_P_Value_raw",
+                 "log_pval_raw", "directed_log_pval_raw")],
+  by = "Name"
+)
+
+name_mapping <- c(
+  "B"              = "B.cells",
+  "Bloodvessels"   = "Endothelial",
+  "Ionocyte"       = "Ionocytes",
+  "PNEC"           = "Neuroendocrine",
+  "Tuft"           = "Tuft.like",
+  "NK"             = "NK.cells",
+  "Fibroblasts"    = "Fibroblast",
+  "Multiciliated"  = "Ciliated",
+  "Basal resting"  = "Basal",
+  "Tcells"         = "T.cells"
+)
+
+hlca_df <- hlca_df %>%
+  dplyr::mutate(Name = ifelse(Name %in% names(name_mapping),
+                              name_mapping[Name], Name))
+
+hlca_df$Source <- "HLCA"
+
+bulk_df$Name <- as.character(bulk_df$Name)
+hlca_df$Name <- as.character(hlca_df$Name)
+
+combined_df <- dplyr::full_join(
+  bulk_df,
+  hlca_df,
+  by = "Name",
+  suffix = c(".Bulk", ".HLCA")
+) %>%
+  dplyr::mutate(
+    P_value.Bulk          = ifelse(is.na(P_value.Bulk), 0.99, P_value.Bulk),
+    Directed_P_Value.Bulk = ifelse(is.na(Directed_P_Value.Bulk), 0.99, Directed_P_Value.Bulk),
+    Significance.Bulk     = ifelse(is.na(Significance.Bulk), "Not Significant", Significance.Bulk),
+    direction.Bulk        = ifelse(is.na(direction.Bulk), "not_sig", direction.Bulk),
+    Source.Bulk           = ifelse(is.na(Source.Bulk), "GTEx", Source.Bulk),
+    directed_log_pval.Bulk = ifelse(is.na(directed_log_pval.Bulk), log10(0.99), directed_log_pval.Bulk),
+    log_pval.Bulk          = ifelse(is.na(log_pval.Bulk),          log10(0.99), log_pval.Bulk),
+    Name = dplyr::case_when(
+      Name == "B.cells"       ~ "B",
+      Name == "Endothelial"   ~ "VEC",
+      Name == "LymphaticEC"   ~ "LEC",
+      Name == "Lymphatic EC"  ~ "LEC",
+      Name == "NK.cells"      ~ "NK",
+      Name == "SmoothMuscle"  ~ "SMC",
+      TRUE                    ~ Name
+    )
+  )
+
+drop_types <- c(
+  "Hillock", "Hillock-like", "PNEC", "Neuroendocrine",
+  "Ionocytes", "Mesothelium", "Tuft.like", "Goblet", "HSC", "SMG"
+)
+
+combined_df <- combined_df %>%
+  dplyr::filter(!Name %in% drop_types)
+
+heatmap_data <- combined_df %>%
+  dplyr::select(Name, directed_log_pval.Bulk, directed_log_pval.HLCA) %>%
+  tidyr::pivot_longer(
+    cols       = c(directed_log_pval.Bulk, directed_log_pval.HLCA),
+    names_to   = "Dataset",
+    values_to  = "directed_log_pval",
+    names_prefix = "directed_log_pval."
+  )
+
+heatmap_matrix <- heatmap_data %>%
+  tidyr::spread(key = Dataset, value = directed_log_pval) %>%
+  tibble::column_to_rownames(var = "Name") %>%
+  as.matrix()
+
+heatmap_matrix[is.na(heatmap_matrix)] <- 0
+mat_for_heatmap <- t(heatmap_matrix)
+
+desired_row_order <- c("HLCA", "Bulk")
+present_rows <- intersect(desired_row_order, rownames(mat_for_heatmap))
+mat_for_heatmap <- mat_for_heatmap[present_rows, , drop = FALSE]
+
+immune_types <- c(
+  "B", "CD4T", "CD8T", "NK",
+  "Macrophages", "Monocytes", "DC", "pDCs",
+  "Plasma", "Mast", "T.cells", "Tcells", "B.cells"
+)
+
+immune_in_mat <- sort(intersect(colnames(mat_for_heatmap), immune_types))
+nonimmune_types <- sort(setdiff(colnames(mat_for_heatmap), immune_in_mat))
+new_col_order <- c(nonimmune_types, immune_in_mat)
+mat_for_heatmap <- mat_for_heatmap[, new_col_order, drop = FALSE]
+
+max_val <- max(abs(mat_for_heatmap), na.rm = TRUE)
+color_mapping <- circlize::colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+
+star_labels <- matrix("", nrow = nrow(mat_for_heatmap), ncol = ncol(mat_for_heatmap))
+rownames(star_labels) <- rownames(mat_for_heatmap)
+colnames(star_labels) <- colnames(mat_for_heatmap)
+
+for (i in seq_len(nrow(mat_for_heatmap))) {
+  for (j in seq_len(ncol(mat_for_heatmap))) {
+    value <- abs(mat_for_heatmap[i, j])
+    if (value > 3) {
+      star_labels[i, j] <- "****"
+    } else if (value > 2) {
+      star_labels[i, j] <- "***"
+    } else if (value > 1.3) {
+      star_labels[i, j] <- "**"
+    } else if (value > 1) {
+      star_labels[i, j] <- "*"
+    } else {
+      star_labels[i, j] <- ""
+    }
+  }
+}
+
+p_heatmap <- ComplexHeatmap::Heatmap(
+  mat_for_heatmap,
+  cluster_rows    = FALSE,
+  cluster_columns = FALSE,
+  name            = "CLR",
+  col             = color_mapping,
+  row_names_gp    = grid::gpar(fontsize = 6),
+  row_names_side  = "left",
+  column_names_gp = grid::gpar(fontsize = 6),
+  heatmap_legend_param = list(
+    title_gp  = grid::gpar(fontsize = 6),
+    labels_gp = grid::gpar(fontsize = 6)
+  ),
+  rect_gp = grid::gpar(col = "white", lwd = 2),
+  cell_fun = function(j, i, x, y, w, h, fill) {
+    row_name <- rownames(mat_for_heatmap)[i]
+    col_name <- colnames(mat_for_heatmap)[j]
+    if (row_name == "Bulk" && col_name == "Plasma") {
+      grid::grid.rect(
+        x, y, w, h,
+        gp = grid::gpar(col = "white", fill = "grey80", lwd = 2)
+      )
+    }
+    lab <- star_labels[i, j]
+    if (lab != "") {
+      grid::grid.text(
+        lab,
+        x + grid::unit(0.01, "npc"),
+        y,
+        rot = 90,
+        gp  = grid::gpar(fontsize = 12, fontface = "bold")
+      )
+    }
+  }
+)
+
+write.csv(
+  hlca_df,
+  file = file.path(results_dir, "HLCA_CLR_composition_age_spearman.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  bulk_df,
+  file = file.path(results_dir, "Bulk_CLR_module_age_spearman.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  combined_df,
+  file = file.path(results_dir, "Bulk_HLCA_CLR_age_spearman_combined.csv"),
+  row.names = FALSE
+)
+
+plot_dir <- file.path(
+  results_dir,
+  "plots/heatmaps/Composition_analysis_spearman/over_1k/Immune_Nonimmune"
+)
+dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+
+pdf(
+  file = file.path(
+    plot_dir,
+    "Composition_analysis_spearman_bulk_hlca_CLR_v3.pdf"
+  ),
+  width  = 12 / 3,
+  height = 3 / 2
+)
+ComplexHeatmap::draw(p_heatmap, newpage = TRUE)
+dev.off()
