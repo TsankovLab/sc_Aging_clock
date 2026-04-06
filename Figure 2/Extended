@@ -1,0 +1,1102 @@
+rm(list=ls())
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(harmony)
+library(ggsci)
+library(paletteer)
+library(stringr)
+library(dplyr)
+library(patchwork)
+library(harmony)
+library(ggsci)
+library(Rcpp)
+library(SeuratObject)
+library(sp)
+library(harmony)
+library(remotes)
+library(devtools)
+library(Seurat)
+library(viridisLite)
+library(paletteer)
+library(ggplot2)
+library(viridis)
+library(ggnewscale)
+library(RColorBrewer)
+library(cowplot)
+library(grid)
+library(paletteer)
+library(tibble)
+library(circlize)
+library(ComplexHeatmap)
+library(dplyr)
+library(tidyr)
+library(devtools)
+library(patchwork)
+
+
+
+####Age_association_lollipop
+srt=get(load(file="over1k object"))
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+sampleID_meta <- 'sample'
+out_dir <- "..."
+category_meta_col='age'
+
+refined_label_meta <- 'cpdb_lvl_2.5_uniform_v3'
+sampleID_meta <- 'sample'
+obj= srt
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+obj = subset(obj, subset=ann_level_1 =="Epithelial", invert=FALSE)
+obj <- AddModuleScore(object = obj, features = gene_list, name = names(gene_list))
+
+if(length(gene_list[[1]])>1){
+   module_scores <- obj@meta.data[,paste0(names(gene_list),"1")] 
+   aggregate_data <- aggregate(module_scores, 
+    by = list(cell_type = obj@meta.data[, refined_label_meta],
+    sample = obj@meta.data[, sampleID_meta]), 
+    FUN = median)
+   } else{
+    module_scores <- obj@assays$RNA@data[names(gene_list), ]
+aggregate_data2=AverageExpression(obj,group.by = c(sampleID_meta,refined_label_meta),layer="data")
+expr_matrix <- aggregate_data2$RNA
+column_names <- colnames(expr_matrix)
+cleaned_column_names <- sub("data\\[.*,\\s.*\\]:", "", column_names)
+
+mki67_data <- expr_matrix[names(gene_list), ]
+
+split_names <- do.call(rbind, strsplit(cleaned_column_names, "_(?!.*_)", perl = TRUE))
+
+
+samples <- split_names[, 1]  
+cell_types <- split_names[, 2]  
+
+
+aggregate_dataX <- data.frame(
+  cell_type = cell_types,
+  sample = samples,
+  x = as.numeric(mki67_data)
+)
+
+aggregate_dataX <- aggregate_dataX[order(aggregate_dataX$sample), ]
+
+rownames(aggregate_dataX)=NULL
+aggregate_dataX$x=log1p(aggregate_dataX$x)
+
+aggregate_data=aggregate_dataX
+
+   }
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr') #editable
+
+    # Convert NA in p_vals to 1
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    # Convert NA in gradients to 0
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+   
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "senescence_subtype_expression_regression_model_output_woFDRall.csv"), row.names = FALSE)
+} 
+
+
+
+gene_name = c()
+
+gene_name=c("ABCA1", "CLDN4", "FANK1", "IL1RN", "MYLK", "SP6", "TRAF3IP3", "ACKR3", "COL5A1", "FAT2", "IL32", "NAGK", "RHBDL2", "SPRR1A", "TREM2", 
+"ACSF2", "CPA4", "FBN1", "IL33", "NCCRP1", "RHCG", "SPRR1B", "TRIM16", "ADAMTS7", "CPPED1", "FER1L4", "IL36G", "NDST1", "RHOV", "SPRR2A", "TUBA1A", 
+"ADAMTSL4", "CRABP2", "IRF6", "NRCAM", "RNF212B", "SRPX2", "TUBB2A", "CRYAB", "FHDC1", "IVL", "NTN1", "RRAD", "SSC4D", "UCP2", "ALOX15B", "CST6", 
+"FLG", "NYNRIN", "S100A4", "STARD5", "ULBP2", "ANGPTL4", "CTNNBIP1", "FLG-AS1", "KLRC4", "S100A8", "STC1", "UPK3B", "ANKRD22", "CUX2", "FRMD8", 
+"KLRK1", "OVOL1", "S100A9", "SUGCT", "VGLL3", "ANXA4", "CXCL1", "GALNT5", "KRT13", "PAM", "SAA1", "SYNPO", "ARHGEF4", "CXCL17", "GAS6-AS1", "KRT16", 
+"PAMR1", "SCD5", "SYTL4", "XG", "ATL1", "CYB5R1", "GBP3", "KRT23", "PAPLN", "SCN4B", "TACSTD2", "ZNF185", "B4GALNT4", "DAPK1", "GCNT4", "KRT6A", 
+"PAQR7", "SEC14L2", "TAGLN", "ZNF429", "C1orf74", "GGT1", "KRT6B", "PCBP4", "TCEA2", "ZNF488", "C1QTNF1", "DHRS12", "GJB4", "LAYN", "PDE9A", "SERPINB13", 
+"TENM2", "ZNF702P", "C1QTNF6", "DIXDC1", "GPX3", "LDLRAD2", "PDLIM1", "SERPINB3", "THSD4", "ZNF704", "C3", "DKK3", "GRHL3", "PGBD5", "SERPINB7", 
+"TLL2", "ZNF750", "CALML3", "DOCK8", "HEG1", "PIK3IP1", "SERPINB9", "TMBIM1", "CALML3-AS1", "DPYSL4", "HEPHL1", "PLA2G4F", "SH3BGRL", "TMEM132A", 
+"CAPN3", "DTNA", "HES2", "PLK2", "SH3TC2", "TMEM217", "CCND1", "DUOXA1", "PLOD2", "SLC15A3", "TMEM229B", "CCND2", "ECM1", "LRP1", "PORCN", "SLC16A2", 
+"TMEM40", "EDN1", "LY6D", "PPP2R2C", "SLC1A1", "TMEM63C", "CD24", "EHD3", "LYPD3", "PROM2", "SLC31A2", "TMEM79", "CD82", "MAGED1", "PRR5L", "SLC39A11", 
+"TMPRSS13", "CEACAM6", "ENC1", "HSPG2", "MATN2", "PRSS22", "SLC44A2", "TMPRSS4", "CHST2", "ENTPD3", "ID3", "PRSS23", "SLC46A3", "TNFSF10", "CKB", 
+"EPHA4", "IGFBP2", "MMP28", "PTGES", "SLC6A11", "TOM1L2", "CLCA2", "EPHB3", "IKZF2", "MXRA5", "RAB7B", "SLC9A3", "TP53I3", "CLDN1", "ESPN", "IL12RB2", 
+"MYH14", "SNCG", "TPM1"
+)
+# removing HRAS AS NOT SHOWN indataset
+
+ 
+#gene_name=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+gene_name_2=c("ABCA1", "CLDN4", "FANK1", "IL1RN", "MYLK", "SP6", "TRAF3IP3", "ACKR3", "COL5A1", "FAT2", "IL32", "NAGK", "RHBDL2", "SPRR1A", "TREM2", 
+"ACSF2", "CPA4", "FBN1", "IL33", "NCCRP1", "RHCG", "SPRR1B", "TRIM16", "ADAMTS7", "CPPED1", "FER1L4", "IL36G", "NDST1", "RHOV", "SPRR2A", "TUBA1A", 
+"ADAMTSL4", "CRABP2", "IRF6", "NRCAM", "RNF212B", "SRPX2", "TUBB2A", "CRYAB", "FHDC1", "IVL", "NTN1", "RRAD", "SSC4D", "UCP2", "ALOX15B", "CST6", 
+"FLG", "NYNRIN", "S100A4", "STARD5", "ULBP2", "ANGPTL4", "CTNNBIP1", "FLG-AS1", "KLRC4", "S100A8", "STC1", "UPK3B", "ANKRD22", "CUX2", "FRMD8", 
+"KLRK1", "OVOL1", "S100A9", "SUGCT", "VGLL3", "ANXA4", "CXCL1", "GALNT5", "KRT13", "PAM", "SAA1", "SYNPO", "ARHGEF4", "CXCL17", "GAS6-AS1", "KRT16", 
+"PAMR1", "SCD5", "SYTL4", "XG", "ATL1", "CYB5R1", "GBP3", "KRT23", "PAPLN", "SCN4B", "TACSTD2", "ZNF185", "B4GALNT4", "DAPK1", "GCNT4", "KRT6A", 
+"PAQR7", "SEC14L2", "TAGLN", "ZNF429", "C1orf74", "GGT1", "KRT6B", "PCBP4", "TCEA2", "ZNF488", "C1QTNF1", "DHRS12", "GJB4", "LAYN", "PDE9A", "SERPINB13", 
+"TENM2", "ZNF702P", "C1QTNF6", "DIXDC1", "GPX3", "LDLRAD2", "PDLIM1", "SERPINB3", "THSD4", "ZNF704", "C3", "DKK3", "GRHL3", "PGBD5", "SERPINB7", 
+"TLL2", "ZNF750", "CALML3", "DOCK8", "HEG1", "PIK3IP1", "SERPINB9", "TMBIM1", "CALML3-AS1", "DPYSL4", "HEPHL1", "PLA2G4F", "SH3BGRL", "TMEM132A", 
+"CAPN3", "DTNA", "HES2", "PLK2", "SH3TC2", "TMEM217", "CCND1", "DUOXA1", "PLOD2", "SLC15A3", "TMEM229B", "CCND2", "ECM1", "LRP1", "PORCN", "SLC16A2", 
+"TMEM40", "EDN1", "LY6D", "PPP2R2C", "SLC1A1", "TMEM63C", "CD24", "EHD3", "LYPD3", "PROM2", "SLC31A2", "TMEM79", "CD82", "MAGED1", "PRR5L", "SLC39A11", 
+"TMPRSS13", "CEACAM6", "ENC1", "HSPG2", "MATN2", "PRSS22", "SLC44A2", "TMPRSS4", "CHST2", "ENTPD3", "ID3", "PRSS23", "SLC46A3", "TNFSF10", "CKB", 
+"EPHA4", "IGFBP2", "MMP28", "PTGES", "SLC6A11", "TOM1L2", "CLCA2", "EPHB3", "IKZF2", "MXRA5", "RAB7B", "SLC9A3", "TP53I3", "CLDN1", "ESPN", "IL12RB2", 
+"MYH14", "SNCG", "TPM1"
+)# Removing TNF as not shown in data
+names(gene_name)="Lung_epithelial"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="Lung_epithelial"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="Lung_epithelial"
+expression_regression_model(obj=srt, category_meta_col='Age', tag="Lung_epithelial_short", out_dir = "...") 
+
+
+####cell cycle markers age association
+
+srt=get(load(file="HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+
+
+figures.dir <- "..."
+gene_name=c("HMGB2","CDK1","NUSAP1","UBE2C","BIRC5","TPX2","TOP2A",
+  "NDC80","NUF2","CKS1B","MKI67","CENPF","TACC3",
+  "CCNB2","CKAP2L","AURKB","BUB1","KIF11","GTSE1",
+  "KIF20B","HJURP","CDCA3","CDC20","TTK","CDC25C","KIF2C","NCAPD2",
+  "DLGAP5","CDCA2","CDCA8","ECT2","KIF23","HMMR","AURKA","ANLN",
+  "CENPE","NEK2","GAS2L3","CENPA")
+
+names(gene_name)="G2M_score"
+
+gene_name=c("HMGB2","CDK1","NUSAP1","UBE2C","BIRC5","TPX2","TOP2A",
+  "NDC80","NUF2","CKS1B","MKI67","CENPF","TACC3",
+  "CCNB2","CKAP2L","AURKB","BUB1","KIF11","GTSE1",
+  "KIF20B","HJURP","CDCA3","CDC20","TTK","CDC25C","KIF2C","NCAPD2",
+  "DLGAP5","CDCA2","CDCA8","ECT2","KIF23","HMMR","AURKA","ANLN",
+  "CENPE","NEK2","GAS2L3","CENPA")
+gene_name_2=c("HMGB2","CDK1","NUSAP1","UBE2C","BIRC5","TPX2","TOP2A",
+  "NDC80","NUF2","CKS1B","MKI67","CENPF","TACC3",
+  "CCNB2","CKAP2L","AURKB","BUB1","KIF11","GTSE1",
+  "KIF20B","HJURP","CDCA3","CDC20","TTK","CDC25C","KIF2C","NCAPD2",
+  "DLGAP5","CDCA2","CDCA8","ECT2","KIF23","HMMR","AURKA","ANLN",
+  "CENPE","NEK2","GAS2L3","CENPA")
+
+names(gene_name)="G2M_score"
+
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="G2M_score"
+
+method="spearman_wFDR_percelltype"
+
+if(!all(gene_name %in% rownames(srt@assays$RNA@data))) {
+  missing_genes <- gene_name[!gene_name %in% rownames(srt@assays$RNA@data)]
+  stop("The following genes are not found in the dataset: ", paste(missing_genes, collapse=", "))
+}
+
+
+grep(pattern = gene_name, x = rownames(srt), value = TRUE)
+
+
+cdkn2a_data_2 <- srt@assays$RNA@data[gene_name, ]
+
+length(srt$sample)
+length(srt$LTforUnknown_ann_finest_level)
+nrow(cdkn2a_data_2)
+length(srt$age_info_60_old)
+
+CellType = "cpdb_lvl_2.5_uniform_v3"
+
+
+heatmap_df_all_genes <- data.frame(
+  SampleID = srt$sample,
+  
+  CellType = srt$cpdb_lvl_2.5_uniform_v3,  
+ 
+  Age = srt$Age  
+)
+gene_names <- rownames(cdkn2a_data_2)
+
+for (gene in gene_names) {
+ 
+  gene_expression <- as.numeric(cdkn2a_data_2[gene, ])
+  
+  heatmap_df_all_genes[[gene]] <- gene_expression
+}
+
+library(dplyr)
+library(tidyr)
+
+long_df <- heatmap_df_all_genes %>%
+  pivot_longer(
+    cols = 4:ncol(heatmap_df_all_genes), 
+    names_to = "Gene",
+    values_to = "GeneExpression"
+  )
+
+df_sample_2 <- long_df %>%
+  group_by(SampleID, Age, CellType, Gene) %>%
+  summarize(GeneExpression = mean(expm1(GeneExpression), na.rm = TRUE), .groups = 'drop') %>% # Delog the gene expression
+  mutate(GeneExpression = log1p(GeneExpression))
+filtered_df=df_sample_2
+
+if (exists("results")) {
+  rm(results)
+}
+
+results <- filtered_df %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$p.value  
+        
+    }, error = function(e) {
+      1
+    }),
+    .groups = 'drop'
+  )
+results <- results %>%
+  group_by(CellType) %>% 
+  mutate(P_Value = p.adjust(P_Value, method = "fdr")) %>% 
+  ungroup() 
+
+str(results)
+results <- results %>%
+  left_join(
+    filtered_df %>%
+      group_by(Gene, CellType) %>%
+      summarise(Correlation = cor(Age, GeneExpression, method = "spearman", use = "complete.obs"), .groups = 'drop'), 
+    by = c("Gene", "CellType")
+  ) %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = first(P_Value),  
+    Direction = ifelse(Correlation > 0, "Increase", "Decrease"),  
+    .groups = 'drop'
+  )
+
+results <- results %>%
+  mutate(
+    NegLog10_P_Value = -log10(P_Value + 1e-300),  
+    Highlight = ifelse(P_Value < 0.05, "Significant", "Not Significant")
+  )
+
+results <- results %>%
+  mutate(NegLog10_P_Value = ifelse(NegLog10_P_Value == 300, 0, NegLog10_P_Value))
+
+size_breaks <- c(-log10(0.05), -log10(0.01))
+size_labels <- c("0.05", "0.01")
+size_values <- scales::rescale(c(-log10(0.05), -log10(0.01)), to = c(2, 6))
+
+results <- results %>%
+  mutate(
+    Size = ifelse(P_Value < 0.05, NegLog10_P_Value, NegLog10_P_Value / 2),  # Scale size
+    Alpha = ifelse(P_Value < 0.05, 1, 0.5) 
+  )
+
+desired_order <- c("AT1", "AT2", "Basal resting","Suprabasal","Hillock-like", "Secretory", "Multiciliated","Club","Goblet","PNEC","Tuft","Ionocyte",
+"SMG",
+"HSC", "Macrophages", "Monocytes", "DC","pDCs",
+"B","Plasma","Mast",
+"CD4T","CD8T","NK",
+"LymphaticEC","Bloodvessels","SmoothMuscle","Fibroblasts","Pericytes","Mesothelium")
+
+results$CellType <- factor(results$CellType, levels = desired_order)
+
+max(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+min(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+
+
+if (exists("results")) {
+  rm(results)
+}
+
+
+results <- filtered_df %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    Spearman_Coeff = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$estimate  
+    }, error = function(e) {
+      0  
+    }),
+    P_Value = tryCatch({
+      cor.test(Age, GeneExpression, method = "spearman")$p.value  
+    }, error = function(e) {
+     
+    }),
+    .groups = 'drop'
+  )
+
+
+results <- results %>%
+  group_by(CellType) %>%  
+  mutate(P_Value = p.adjust(P_Value, method = "fdr")) %>% 
+  ungroup()  
+
+
+str(results)
+
+results <- results %>%
+  group_by(Gene, CellType) %>%
+  summarise(
+    P_Value = first(P_Value), 
+    Spearman_Coeff = first(Spearman_Coeff), 
+    Direction = ifelse(Spearman_Coeff > 0, "Increase", "Decrease"),  
+    .groups = 'drop'
+  )
+
+
+results <- results %>%
+  mutate(
+    NegLog10_P_Value = -log10(P_Value + 1e-300),  
+    Highlight = ifelse(P_Value < 0.05, "Significant", "Not Significant")
+  )
+
+results <- results %>%
+  mutate(NegLog10_P_Value = ifelse(NegLog10_P_Value == 300, 0, NegLog10_P_Value))
+
+
+size_breaks <- c(-log10(0.05), -log10(0.01))
+size_labels <- c("0.05", "0.01")
+size_values <- scales::rescale(c(-log10(0.05), -log10(0.01)), to = c(2, 6))
+
+
+results <- results %>%
+  mutate(
+    Size = ifelse(P_Value < 0.05, NegLog10_P_Value, NegLog10_P_Value / 2),  
+    Alpha = ifelse(P_Value < 0.05, 1, 0.5) 
+    
+  )
+
+
+results <- results %>%
+  mutate(
+    Significance = case_when(
+      P_Value < 0.05 ~ "0.05",
+      P_Value < 0.1 ~ "0.1",
+      TRUE ~ "ns"
+    )
+  )
+desired_order <- c("AT1", "AT2", "Basal resting","Suprabasal","Hillock-like", "Secretory", "Multiciliated","Club","Goblet","PNEC","Tuft","Ionocyte",
+"SMG",
+"HSC", "Macrophages", "Monocytes", "DC","pDCs",
+"B","Plasma","Mast",
+"CD4T","CD8T","NK",
+"LymphaticEC","Bloodvessels","SmoothMuscle","Fibroblasts","Pericytes","Mesothelium")
+
+results$CellType <- factor(results$CellType, levels = desired_order)
+
+max(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+min(results$NegLog10_P_Value[!is.na(results$NegLog10_P_Value)])
+
+write.csv(results,file=paste0(figures.dir,"/HLCA_full_all_",names(gene_name)[1],"_dotplot_Pvalues&direction_using_data_",CellType,"_Median_seurat_AE_Log1pMeanExpm1_v2_",method,".csv"))
+
+dot_plot=NULL
+
+dot_plot <- ggplot(results, aes(x = Gene, y = CellType, size = NegLog10_P_Value)) +
+  
+  
+  geom_point(shape = 21, aes(color = Significance, fill = Spearman_Coeff), stroke = 1, show.legend = TRUE) +
+  
+  
+  scale_color_manual(values = c("0.05" = "black", "0.1" = "gray", "ns" = "transparent")) +
+  
+
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  
+
+  scale_size_continuous(range = c(0.2, 2.5)) +
+  
+
+  labs(
+    title = paste0("Dot Plot of ", names(gene_name)[1], " Gene Expression Changes"),
+    x = "Gene",
+    y = "Cell Type",
+    fill = "Spearman Coefficient",
+    color = "Significance",
+    size = "-Log10 P-Value"
+  ) +
+  
+  
+  theme_minimal() +
+  
+
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),  # Font size for x-axis
+    axis.text.y = element_text(size = 6),  
+    axis.title.x = element_text(size = 6),  
+    axis.title.y = element_text(size = 6),  
+    legend.text = element_text(size = 6),  
+    legend.title = element_text(size = 6),  
+    plot.title = element_text(size = 6),
+    legend.key.size = unit(0.3, "cm"), 
+    legend.spacing = unit(0.2, "cm"),   
+    legend.margin = margin(0, 0, 0, 0),  
+    legend.box.margin = margin(0, 0, 0, 0)  
+  )
+
+
+print(dot_plot)
+
+
+
+
+pdf(file=paste0(figures.dir,"/HLCA_full_all_",names(gene_name)[1],"_dotplot_Pvalues&direction_using_data_",CellType,"_Median_seurat_AE_Log1pMeanExpm1_v2_",method,".pdf"),
+  height=sqrt(length(unique(heatmap_df_all_genes$CellType)))-2,
+  width=log(length(gene_name))+3)
+dot_plot
+dev.off()
+
+
+####senescence modules age association heatmap
+
+srt=get(load(file=".../HLCA_F_QC_Adams_info_DonorLung_harmony_ageNA_removed_label_transfered_ann_finest_level_highlvl_reanotated_sn_removed.Rda"))
+table(srt$cpdb_lvl_2.5_uniform_v2)
+ 
+ 
+srt$cpdb_lvl_2.5_uniform_v3=srt$cpdb_lvl_2.5_uniform_v2
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Basal resting"] <- 'Basal resting'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Suprabasal"] <- 'Suprabasal'
+srt$cpdb_lvl_2.5_uniform_v3[srt$LTforUnknown_ann_finest_level == "Hillock-like"] <- 'Hillock-like'
+table(srt$cpdb_lvl_2.5_uniform_v3)
+
+sampleID_meta <- 'sample'
+obj=srt
+category_meta_col='age'
+obj=srt
+
+expression_regression_model <- function(obj, category_meta_col, tag, out_dir){
+
+    
+    sampleID <- obj$sample
+    Age <- as.numeric(obj$Age)
+    df <- data.frame(sampleID, Age)
+    rownames(df) <- NULL
+    df <- distinct(df)
+    rownames(df) <- df$sampleID
+
+obj <- AddModuleScore(object = obj, features = gene_list, name = names(gene_list))
+
+if(length(gene_list[[1]])>1){
+   module_scores <- obj@meta.data[,paste0(names(gene_list),"1")] 
+   aggregate_data <- aggregate(module_scores, 
+    by = list(cell_type = obj@meta.data[, refined_label_meta],
+    sample = obj@meta.data[, sampleID_meta]), 
+    FUN = median)
+   } else{
+    module_scores <- obj@assays$RNA@data[names(gene_list), ]
+aggregate_data2=AverageExpression(obj,group.by = c(sampleID_meta,refined_label_meta),layer="data")
+expr_matrix <- aggregate_data2$RNA
+column_names <- colnames(expr_matrix)
+cleaned_column_names <- sub("data\\[.*,\\s.*\\]:", "", column_names)
+
+mki67_data <- expr_matrix[names(gene_list), ]
+
+split_names <- do.call(rbind, strsplit(cleaned_column_names, "_(?!.*_)", perl = TRUE))
+
+
+samples <- split_names[, 1]  
+cell_types <- split_names[, 2]  
+
+
+aggregate_dataX <- data.frame(
+  cell_type = cell_types,
+  sample = samples,
+  x = as.numeric(mki67_data)
+)
+
+aggregate_dataX <- aggregate_dataX[order(aggregate_dataX$sample), ]
+
+rownames(aggregate_dataX)=NULL
+aggregate_dataX$x=log1p(aggregate_dataX$x)
+
+aggregate_data=aggregate_dataX
+
+   }
+    library(reshape2)
+    df_wnt7a <- dcast(aggregate_data, sample ~ cell_type, value.var = "x")
+   
+    df_wnt7a <- as.data.frame(df_wnt7a)
+
+    rownames(df_wnt7a) <- df_wnt7a$sample
+
+    df_wnt7a <- df_wnt7a[, -1]  
+    df <- df[match(rownames(df_wnt7a), rownames(df)), ] 
+
+    df2 <- df_wnt7a
+
+    # Reorder row names in df to match Dout 
+    df <- df[match(rownames(df2), rownames(df)), ] 
+
+    final <- cbind(df, df2)
+    model <- function(df, subtype_names, dependant_var){
+
+        final_model_results <- list()
+        j <- 1
+        for (subtype in subtype_names){
+            
+            model2= cor.test(df$Age,df[[subtype]],method = "spearman") 
+            
+            p_val=model2$p.value 
+            final_model_results[[j]] <- list(model2, subtype, p_val)
+            j <- j + 1
+        }
+        return(final_model_results)
+    }
+
+    model_matrix_input <- model(df=final, subtype_names=unique(obj@meta.data[,refined_label_meta]), dependant_var=category_meta_col)
+
+    if (is.character(model_matrix_input)){
+        message("'category_meta_col' must exactly match one of the metadata columns in 'obj'")
+        stop()
+    }
+
+    p_vals <- c()
+    names <- c()
+    gradients <- c()
+
+    for (i in 1:length(model_matrix_input)){
+        p_val <- model_matrix_input[[i]][[3]][1]
+        name <- model_matrix_input[[i]][[2]][1]
+        
+        gradient <- model_matrix_input[[i]][[1]]$estimate[1]# for spearman test
+        p_vals <- append(p_vals, p_val)
+        names <- append(names, name)
+        gradients <- append(gradients, gradient)
+    }
+
+    out_df <- data.frame(names, p_vals, gradients)
+    out_df$p_vals <- p.adjust(out_df$p_vals, method = 'fdr') #editable
+
+    # Convert NA in p_vals to 1
+    out_df$p_vals[is.na(out_df$p_vals)] <- 1
+
+    # Convert NA in gradients to 0
+    out_df$gradients[is.na(out_df$gradients)] <- 0
+
+
+    out_df$Significance <- 'temp'
+    out_df$Significance[out_df$p_vals > 0.05] <- 'Not Significant'
+    out_df$Significance[out_df$p_vals < 0.05] <- 'Significant'
+
+    directed_p_value <- c()
+    for (row in 1:nrow(out_df)){
+        if (out_df[row,'gradients'] <= 0){
+            directed_p_value <- append(directed_p_value, (-1*out_df[row,'p_vals']))
+        } else {
+            directed_p_value <- append(directed_p_value, (out_df[row,'p_vals']))
+        } 
+    }
+    out_df$directed_p_value <- directed_p_value
+
+    out_df$direction <- 'temp'
+    out_df$direction[out_df$gradients > 0] <- 'positive correlation'
+    out_df$direction[out_df$gradients < 0] <- 'negative correlation'
+
+
+    out_df$log_pval <- -log10(out_df$p_vals)
+    out_df$directed_log_pval <- sign(out_df$directed_p_value) * out_df$log_pval
+    out_df$direction[out_df$p_vals > 0.05] <- 'not_sig'
+
+    figs <- list()
+
+    if(any(unique(out_df$direction)=="positive correlation") & any(unique(out_df$direction)=="negative correlation")){
+        palette = c("#00AFBB","#D3D3D3","#FC4E07")
+        }else if(!any(unique(out_df$direction)=="negative correlation")){
+            palette = c("#D3D3D3","#FC4E07")
+            }else if(!any(unique(out_df$direction)=="positive correlation")){
+                palette = c("#00AFBB","#D3D3D3")
+            }
+
+    m <- ggdotchart(out_df, x = "names", y = "directed_log_pval",
+            color = "direction",                             
+            palette = palette, 
+            sorting = "descending",                      
+            add = "segments",                             
+            add.params = list(color = "lightgray", size = 2), 
+            
+            title = paste0(tag, ' ', category_meta_col, ' regression composition analysis'),
+            dot.size = 8,                                
+            
+            font.label = list(color = "white", size = 8, 
+                                vjust = 0.5),              
+            ggtheme = theme_pubr()                        
+    ) +
+    geom_hline(yintercept = 1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = -1.30103, linetype = 2, color = "lightgray") +
+    geom_hline(yintercept = 0, linetype = 1, color = "black")
+    figs[[1]] <- m
+   
+
+    write.csv(out_df, paste0(out_dir, category_meta_col, '_', tag, "senescence_subtype_expression_regression_model_output_wFDRall.csv"), row.names = FALSE)
+}
+
+########Check "coreGS_v2" file for the rest of the senescence signatures
+
+
+gene_name = c()
+gene_name = c( "MAPK14","TIMP2","TNFRSF1B","VEGFA", "CSF3","CXCL16","HGF", "ICAM3","IGFBP2","IGFBP5","IL7", "INHBA", "NKFB1", "IGF1", "IGFBP4", "IL17A","TNF","H2AX", "BCL2", "CCL2", "CCL4", "CCL7", "CCL3", "CCL5", "CCL8", "CXCL2","CXCL12","FAS","ICAM1", "IFNG","CXCL10","GDF15", "SERPINE", "TGFB1", "IGFBP3", "P53", "CDKN1A", "CDKN2A", "CDKN2B","CEBPB", "CSF1", "CSF2", "IL1A", "IL1B", "IL6", "MKI67","IGFB7", "LMNB1", "MMP2", "MMP1","MMP3","MMP9", "MMP10", "MMP12","MMP13","PLAUR","SPP1", "TAF","TNFRSF1A", "TP53BP1")
+gene_name_2=c("MAPK14","TIMP2","TNFRSF1B","VEGFA", "CSF3","CXCL16","HGF", "ICAM3","IGFBP2","IGFBP5","IL7", "INHBA" ,"NKFB1", "IGF1", "IGFBP4", "IL17A","TNF","H2AX", "BCL2", "CCL2", "CCL4", "CCL7", "CCL3", "CCL5", "CCL8", "CXCL2","CXCL12","FAS","ICAM1", "IFNG","CXCL10","GDF15", "SERPINE", "TGFB1", "IGFBP3", "P53", "CDKN1A", "CDKN2A", "CDKN2B","CEBPB", "CSF1", "CSF2", "IL1A", "IL1B", "IL6", "MKI67","IGFB7", "LMNB1", "MMP2", "MMP1","MMP3","MMP9", "MMP10", "MMP12","MMP13","PLAUR","SPP1", "TAF","TNFRSF1A", "TP53BP1")
+names(gene_name)="SenNet"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="SenNet"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="SenNet"
+expression_regression_model(obj=srt, category_meta_col='Age', tag="SenNet", out_dir = "...") 
+gene_name = c()
+
+gene_name=c("EGFR", "FAS", "FGF2", "VEGFA", "AXL", "BRCA1", "CXCL1", "FOXM1", "GDF15", "HELLS", "HMGB1", "HMGB2", "ICAM", "IGFBP1", "IGFBP2", "IGFBP5", "IGFBP7", "CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK1", "CCNA2", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "ICAM1", "IGF1", "LMNB1", "MDM2",
+  "IGFBP7", "MIF", "SERPINE1", "STAT1", "NFKB1", "FOXM1")
+
+ 
+#gene_name=c("CDK4", "CDK6", "RB1", "E2F1", "TP53", "CCL2", "CCNA2", "CCNE2", "CSF2", "HMGB1", "HMGB2", "IGFBP7", "IL1A", "IL1B", "IL6", "CXCL8", "LMNB1", "MMP1", "MMP2", "MMP3", "CDKN2B", "CDKN2A", "SERPINE1", "MIF", "CD74", "MAPK1", "MAPK3", "MAPK14", "CASP1", "SIRT1", "IFNG", "IL12A", "IL12B", "IL23A", "GLB1", "CD44", "FLT1", "TICAM1", "TRAM1", "MYD88", "TLR4", "NFKB2", "LMNB2", "PRKN", "HGF", "VEGFA", "VEGFB", "VEGFC", "VEGFD", "PLAUR", "CCL1")
+gene_name_2=c("EGFR", "FAS", "FGF2", "VEGFA", "AXL", "BRCA1", "CXCL1", "FOXM1", "GDF15", "HELLS", "HMGB1", "HMGB2", "ICAM", "IGFBP1", "IGFBP2", "IGFBP5", "IGFBP7", "CDKN1A", "CDKN2A", "IL6", "CDKN2B", "CDK1", "CCNA2", 
+  "CXCL8", "IGFBP3", "IL1A", "JUN", "ICAM1", "IGF1", "LMNB1", "MDM2",
+  "IGFBP7", "MIF", "SERPINE1", "STAT1", "NFKB1", "FOXM1")
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="DeepScence"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="DeepScence"
+expression_regression_model(obj=srt, category_meta_col='Age', tag="DeepScence", out_dir = "...") 
+gene_name = c()
+
+gene_name=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "VEGFA", "CDKN1A", "CDKN2A", "STAT1", "PARP1", "IL1A", "CXCL1", "CCL2", "AXL", "WNT2", "HMGB2", "HMGB1", "IGFBP5", "GDF15", "MDM2", "CDKN2B", "CCNA2", "CDK1", "HELLS", "FOXM1", "BUB1B", "LMNB1", "BRCA1", "JUN", "MIF", "HMGB3", "LBR", "CBS", "ZMAT3", "GRN", "CCND1", "SERPINB2", "TGFB2", "CTSB", "WNT5A", "SMURF2", "HJURP", "MAD2L1", "BUB1", "BIRC5", "RRM2", "UBE2C", "MYBL2", "AURKB", "EZH2", "CENPA", "PLK1", "CDK4", "CDK2", "CTNNAL1", "KIF2C", "CHEK1", "TOPBP1", "TWIST1", "CNOT6", "PIM1", "APEX1", "UHRF1", "FANCD2", "CTNNB1", "CXCR2", "ETS2", "MMP9", "TP53", "TERT", "ATM", "WRN", "LMNA", "KL", "E2F1", "STAT3", "AKT1", "HRAS", "MYC", "ERBB2", "FOS", "PRKCD", "PIN1", "PTEN", "BCL2", "CEBPB", "PML", "GSK3B", "PRKDC", "RB1", "FOXO1", "RECQL4", "SOD2", "RELA", "SIRT1", "HDAC1", "MAPK14", "MAPK9", "BMI1", "MTOR", "SIRT6", "PPARG", "SIRT3", "TP53INP1", "RRM2B", "CTSD", "DPP4", "NTN4", "BTG2", "MXD4", "DUSP6", "TSC22D1", "SLC31A2", "NDRG1", "TLR3", "DDB2", "NCAPG2", "TACC3", "AURKA", "TTK", "ANLN", "DEK", "TPX2", "CDCA2", "CDC45", "KIF11", "GMNN", "HNRNPD", "HNRNPA1", "TYMS", "PTTG1", "CDC7", "KIFC1", "SRSF3", "NEK2", "FBXO5", "RNASEH2A", "CCNB1", "CHAF1B", "DKC1", "USP1", "SKP2", "EIF4EBP1", "DNMT1", "KIF20A", "ILF3", "TRA2B", "ESPL1", "CIT", "GTSE1", "RACGAP1", "HMGA1", "ETS1", "RRM1", "PHGDH", "EEF1E1", "RPS9", "ORC1", "RBL1", "XPO1", "EWSR1", "NRAS", "HMGA2", "WNT16", "TXN", "STAT5B", "STAT5A", "NBN", "PDGFB", "HIF1A", "TOP1", "UBE2I", "TERF2", "FOXO3", "HSF1", "HSPA9", "HSPA1A", "PTK2", "SP1", "MAP3K5", "FOXO4", "HBP1", "PTGS2", "TFDP1", "HDAC2", "JAK2", "NFKBIA", "CLU", "ATR", "ZMPSTE24", "TP63", "PPM1D", "PPARGC1A", "SIRT7", "TP53BP1", "NFE2L2", "PIK3CA", "FGF21", "TBX2", "MAP3K7", "MARCHF5", "MAST1", "MATK", "MAVS", "MCAM", "MCU", "MDH1", "MDP1", "ME1", "ME2", "MED12", "MEF2A", "MEIS2", "MEN1", "MEOX1", "MET", "METTL14", "MITF", "MKRN1", "MME", "MNX1", "MOB3A", "MORF4L1", "MOS", "MRTFA", "MRTFB", "MST1", "MT1G", "MTDH", "MUC4", "MUS81", "MYBBP1A", "MYCN", "MYD88", "NACC1", "NADK", "NBR1", "NCAPH2", "NDST2", "NEDD4", "NEK1", "NEK4", "NEK9", "NF1", "NF2", "NHEJ1", "NIPA2", "NLK", "NLRX1", "NOLC1", "NOTCH1", "NOTCH3", "NR2E1", "NRF1", "NRSN2", "NSUN2", "NUAK2", "NUDT5", "NUTF2", "OGT", "ORAI1", "OTX2", "OXTR", "P2RY14", "P3H1", "PAK2", "PAK4", "PARK7", "PATZ1", "PAX8", "PCGF2", "PDCD10", "PDCD11", "PDCD4", "PDIK1L", "PDZD2", "PELP1", "PES1", "PEX19", "PI4KB", "PIK3C2A", "PIK3R5", "PINX1", "PIR", "PITX1", "PLA2G2A", "PLD2", "PMVK", "POU3F1", "PPIB", "PPM1B", "PPP2R1A", "PPP2R5A", "PRKCH", "PRKD1", "PRKD2", "PRPF19", "PSMA2", "PSMA5", "PSMB1", "PTPN6", "PURB", "PYGL", "RACK1", "RAD23B", "RAD51C", "RANBP9", "RAP1GAP", "RAPGEF4", "RARB", "RASSF4", "RBM39", "RBPJ", "RCC1", "RECK", "RELB", "RNASEH2B", "ROMO1", "RPL11", "RPS14", "RPTOR", "RRAD", "RRAS2", "RRP8", "RTN4", "SALL1", "SAMHD1", "SAT2", "SELENOH", "SETD1A", "SFN", "SGK1", "SIAH1", "SIK1", "SIX6", "SLC52A1", "SLC5A2", "SMARCA4", "SMC1A", "SMG1", "SORBS2", "SOX1", "SPAG9", "SPI1", "SPIN1", "SPOP", "SRSF2", "SSX2", "STAG2", "STIM1", "STK32C", "STK4", "STK40", "STN1", "SUMO3", "SUPT5H", "SYK", "TBK1", "TBPL1", "TEAD1", "TEAD4", "TFG", "TGFB1I1", "TGFBR2", "TLR10", "TLR8", "TOM1", "TOP3A", "TP53BP2", "TP53I3", "TPP1", "TPR", "TRPM7", "TRRAP", "TYK2", "UBE2N", "UBE2V1", "UBE2V2", "UBTD1", "UTP6", "VDR", "VENTX", "WEE1", "WIF1", "WIPI1", "WNT7B", "WSB1", "WT1", "WWP1", "XAF1", "XIAP", "XPC", "YWHAB", "ZCCHC10", "ZDHHC3", "ZFP36", "ZFX", "ZNF207", "ZNF217")# removing HRAS AS NOT SHOWN indataset
+
+gene_name_2=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "VEGFA", "CDKN1A", "CDKN2A", "STAT1", "PARP1", "IL1A", "CXCL1", "CCL2", "AXL", "WNT2", "HMGB2", "HMGB1", "IGFBP5", "GDF15", "MDM2", "CDKN2B", "CCNA2", "CDK1", "HELLS", "FOXM1", "BUB1B", "LMNB1", "BRCA1", "JUN", "MIF", "HMGB3", "LBR", "CBS", "ZMAT3", "GRN", "CCND1", "SERPINB2", "TGFB2", "CTSB", "WNT5A", "SMURF2", "HJURP", "MAD2L1", "BUB1", "BIRC5", "RRM2", "UBE2C", "MYBL2", "AURKB", "EZH2", "CENPA", "PLK1", "CDK4", "CDK2", "CTNNAL1", "KIF2C", "CHEK1", "TOPBP1", "TWIST1", "CNOT6", "PIM1", "APEX1", "UHRF1", "FANCD2", "CTNNB1", "CXCR2", "ETS2", "MMP9", "TP53", "TERT", "ATM", "WRN", "LMNA", "KL", "E2F1", "STAT3", "AKT1", "HRAS", "MYC", "ERBB2", "FOS", "PRKCD", "PIN1", "PTEN", "BCL2", "CEBPB", "PML", "GSK3B", "PRKDC", "RB1", "FOXO1", "RECQL4", "SOD2", "RELA", "SIRT1", "HDAC1", "MAPK14", "MAPK9", "BMI1", "MTOR", "SIRT6", "PPARG", "SIRT3", "TP53INP1", "RRM2B", "CTSD", "DPP4", "NTN4", "BTG2", "MXD4", "DUSP6", "TSC22D1", "SLC31A2", "NDRG1", "TLR3", "DDB2", "NCAPG2", "TACC3", "AURKA", "TTK", "ANLN", "DEK", "TPX2", "CDCA2", "CDC45", "KIF11", "GMNN", "HNRNPD", "HNRNPA1", "TYMS", "PTTG1", "CDC7", "KIFC1", "SRSF3", "NEK2", "FBXO5", "RNASEH2A", "CCNB1", "CHAF1B", "DKC1", "USP1", "SKP2", "EIF4EBP1", "DNMT1", "KIF20A", "ILF3", "TRA2B", "ESPL1", "CIT", "GTSE1", "RACGAP1", "HMGA1", "ETS1", "RRM1", "PHGDH", "EEF1E1", "RPS9", "ORC1", "RBL1", "XPO1", "EWSR1", "NRAS", "HMGA2", "WNT16", "TXN", "STAT5B", "STAT5A", "NBN", "PDGFB", "HIF1A", "TOP1", "UBE2I", "TERF2", "FOXO3", "HSF1", "HSPA9", "HSPA1A", "PTK2", "SP1", "MAP3K5", "FOXO4", "HBP1", "PTGS2", "TFDP1", "HDAC2", "JAK2", "NFKBIA", "CLU", "ATR", "ZMPSTE24", "TP63", "PPM1D", "PPARGC1A", "SIRT7", "TP53BP1", "NFE2L2", "PIK3CA", "FGF21", "TBX2", "MAP3K7", "MARCHF5", "MAST1", "MATK", "MAVS", "MCAM", "MCU", "MDH1", "MDP1", "ME1", "ME2", "MED12", "MEF2A", "MEIS2", "MEN1", "MEOX1", "MET", "METTL14", "MITF", "MKRN1", "MME", "MNX1", "MOB3A", "MORF4L1", "MOS", "MRTFA", "MRTFB", "MST1", "MT1G", "MTDH", "MUC4", "MUS81", "MYBBP1A", "MYCN", "MYD88", "NACC1", "NADK", "NBR1", "NCAPH2", "NDST2", "NEDD4", "NEK1", "NEK4", "NEK9", "NF1", "NF2", "NHEJ1", "NIPA2", "NLK", "NLRX1", "NOLC1", "NOTCH1", "NOTCH3", "NR2E1", "NRF1", "NRSN2", "NSUN2", "NUAK2", "NUDT5", "NUTF2", "OGT", "ORAI1", "OTX2", "OXTR", "P2RY14", "P3H1", "PAK2", "PAK4", "PARK7", "PATZ1", "PAX8", "PCGF2", "PDCD10", "PDCD11", "PDCD4", "PDIK1L", "PDZD2", "PELP1", "PES1", "PEX19", "PI4KB", "PIK3C2A", "PIK3R5", "PINX1", "PIR", "PITX1", "PLA2G2A", "PLD2", "PMVK", "POU3F1", "PPIB", "PPM1B", "PPP2R1A", "PPP2R5A", "PRKCH", "PRKD1", "PRKD2", "PRPF19", "PSMA2", "PSMA5", "PSMB1", "PTPN6", "PURB", "PYGL", "RACK1", "RAD23B", "RAD51C", "RANBP9", "RAP1GAP", "RAPGEF4", "RARB", "RASSF4", "RBM39", "RBPJ", "RCC1", "RECK", "RELB", "RNASEH2B", "ROMO1", "RPL11", "RPS14", "RPTOR", "RRAD", "RRAS2", "RRP8", "RTN4", "SALL1", "SAMHD1", "SAT2", "SELENOH", "SETD1A", "SFN", "SGK1", "SIAH1", "SIK1", "SIX6", "SLC52A1", "SLC5A2", "SMARCA4", "SMC1A", "SMG1", "SORBS2", "SOX1", "SPAG9", "SPI1", "SPIN1", "SPOP", "SRSF2", "SSX2", "STAG2", "STIM1", "STK32C", "STK4", "STK40", "STN1", "SUMO3", "SUPT5H", "SYK", "TBK1", "TBPL1", "TEAD1", "TEAD4", "TFG", "TGFB1I1", "TGFBR2", "TLR10", "TLR8", "TOM1", "TOP3A", "TP53BP2", "TP53I3", "TPP1", "TPR", "TRPM7", "TRRAP", "TYK2", "UBE2N", "UBE2V1", "UBE2V2", "UBTD1", "UTP6", "VDR", "VENTX", "WEE1", "WIF1", "WIPI1", "WNT7B", "WSB1", "WT1", "WWP1", "XAF1", "XIAP", "XPC", "YWHAB", "ZCCHC10", "ZDHHC3", "ZFP36", "ZFX", "ZNF207", "ZNF217")# Removing TNF as not shown in data
+names(gene_name)="Lee_Optimized_woCellMarker"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="cellAge"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="cellAge"
+
+expression_regression_model(obj=srt, category_meta_col='Age', tag="cellAge", out_dir = "...") 
+
+
+gene_name = c()
+
+gene_name=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB2", "HMGB1", "HMGB3", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "CXCL6", "CXCL5", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "TIMP1", "CCL5", "IGFBP6", "SERPINE2", "IGF2", "LIF", "IL6R")
+
+ 
+gene_name_2=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB2", "HMGB1", "HMGB3", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "CXCL6", "CXCL5", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "TIMP1", "CCL5", "IGFBP6", "SERPINE2", "IGF2", "LIF", "IL6R")
+
+names(gene_name)="network"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="network"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="network"
+expression_regression_model(obj=srt, category_meta_col='Age', tag="network", out_dir = "... ") 
+gene_name = c()
+
+gene_name=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "CDKN1A", "CDKN2A", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB1", "IGFBP5", "GDF15", "IGF1", "JUN", "MIF", "TGFB1", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "TIMP2", "CTSB", "MMP12", "MMP3", "CTNNB1", "CXCR2", "ETS2", "IL15", "IL7", "MMP9", "PLAUR", "TNF", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "CCL5", "IGFBP6", "ANGPTL4", "EDN1", "ITGA2", "C3", "CXCL10", "CXCL12", "PTBP1", "GEM", "BMP2", "CCL20", "CCL3", "CCL7", "CSF1", "CSF2", "DKK1", "EREG", "MMP13", "MMP2", "PAPPA", "PECAM1", "WNT16", "SERPINE2", "ANGPT1", "KITLG", "ANG", "BMP6", "CCL1", "CCL13", "CCL26", "CCL4", "CCL8", "CD55", "CD9", "CSF2RB", "CXCL16", "EGF", "ESM1", "FGF7", "GMFG", "HGF", "ICAM3", "IL13", "IL18", "IL2", "IL6ST", "INHA", "ITPKA", "MMP14", "NRG1", "PGF", "PIGF", "PTGER2", "PTGES", "RPS6KA5", "TNFRSF1A", "VEGFC", "ACVR1B", "BEX3", "CCL16", "CCL24", "CCL3L1", "CST4", "FGF1", "IL10", "IL32", "IQGAP2", "LCP1", "NAP1L4", "SCAMP4", "SELPLG", "SEMA3F", "SERPINB4", "SPP1", "SPX", "TUBGCP2", "VGF")
+ 
+gene_name_2=c("IL6", "IGFBP3", "EGFR", "SERPINE1", "IGFBP1", "IGFBP7", "FAS", "FGF2", "VEGFA", "CDKN1A", "CDKN2A", "TNFRSF10C", "CXCL8", "IL1A", "CXCL1", "ICAM1", "CCL2", "IGFBP2", "AXL", "WNT2", "HMGB1", "IGFBP5", "GDF15", "IGF1", "JUN", "MIF", "TGFB1", "MMP1", "IL1B", "CXCL3", "CXCL2", "MMP10", "PLAU", "TNFRSF1B", "TIMP2", "CTSB", "MMP12", "MMP3", "CTNNB1", "CXCR2", "ETS2", "IL15", "IL7", "MMP9", "PLAUR", "TNF", "AREG", "PLAT", "IGFBP4", "TNFRSF11B", "CCL5", "IGFBP6", "ANGPTL4", "EDN1", "ITGA2", "C3", "CXCL10", "CXCL12", "PTBP1", "GEM", "BMP2", "CCL20", "CCL3", "CCL7", "CSF1", "CSF2", "DKK1", "EREG", "MMP13", "MMP2", "PAPPA", "PECAM1", "WNT16", "SERPINE2", "ANGPT1", "KITLG", "ANG", "BMP6", "CCL1", "CCL13", "CCL26", "CCL4", "CCL8", "CD55", "CD9", "CSF2RB", "CXCL16", "EGF", "ESM1", "FGF7", "GMFG", "HGF", "ICAM3", "IL13", "IL18", "IL2", "IL6ST", "INHA", "ITPKA", "MMP14", "NRG1", "PGF", "PIGF", "PTGER2", "PTGES", "RPS6KA5", "TNFRSF1A", "VEGFC", "ACVR1B", "BEX3", "CCL16", "CCL24", "CCL3L1", "CST4", "FGF1", "IL10", "IL32", "IQGAP2", "LCP1", "NAP1L4", "SCAMP4", "SELPLG", "SEMA3F", "SERPINB4", "SPP1", "SPX", "TUBGCP2", "VGF")
+names(gene_name)="SenMayo"
+ 
+gene_name_3=union((gene_name),(gene_name_2))
+gene_name=(gene_name_3)
+names(gene_name)="SenMayo"
+gene_list=list(gene_name)
+gene_name = list(gene_name)
+gene_list = gene_name
+
+names(gene_list)=gene_name
+print(gene_list)
+
+ 
+names(gene_list)="SenMayo"
+expression_regression_model(obj=srt, category_meta_col='Age', tag="SenMayo", out_dir = "...") 
+
+df_list <- list(
+  SenNet_df = SenNet_df,
+  DeepScence_df = DeepScence_df,
+  geneAge_df = geneAge_df,
+  cellAge_df = cellAge_df,
+  network_df = network_df,
+  trans_df = trans_df,
+  Quest_df = Quest_df,
+  CSgene_df = CSgene_df,
+  SASP_df = SASP_df,
+  sensig_df = sensig_df,
+  SenMayo_df = SenMayo_df,
+  Senescence_df = Senescence_df 
+)
+
+# Step 2: Define your name mapping
+name_mapping <- c(
+  "B" = "B.cells",
+  "Bloodvessels" = "Endothelial",
+  "Ionocyte" = "Ionocytes",
+  "PNEC" = "Neuroendocrine",
+  "Tuft" = "Tuft.like",
+  "NK" = "NK.cells",
+  "Fibroblasts" = "Fibroblast",
+  "Multiciliated" = "Ciliated",
+  "Basal resting" = "Basal",
+  "Tcells" = "T.cells"
+)
+
+# Step 3: Apply the renaming and mutation across all data frames in the list
+df_list <- lapply(df_list, function(df) {
+  names(df) <- sub("names", "Name", names(df))
+  names(df) <- sub("p_vals", "P_value", names(df))
+  names(df) <- sub("directed_p_value", "Directed_P_Value", names(df))
+
+  df <- df %>%
+    mutate(Name = ifelse(Name %in% names(name_mapping), name_mapping[Name], Name))
+
+  return(df)
+})
+
+# Optional Step 4: Unpack back into individual variables if needed
+list2env(df_list, envir = .GlobalEnv)
+
+
+DeepScence_df <- read.csv(".../Age_DeepScence_subtype_expression_regression_model_output_wFDRall.csv")
+geneAge_df <- read.csv(".../Age_geneAge_subtype_expression_regression_model_output_wFDRall.csv")
+SenMayo_df <- read.csv(".../Age_SenMayo_subtype_expression_regression_model_output_wFDRall.csv")
+cellAge_df <- read.csv(".../Age_cellAge_subtype_expression_regression_model_output_wFDRall.csv")
+Quest_df <- read.csv(".../Age_Quest_subtype_expression_regression_model_output_wFDRall.csv")
+sensig_df <- read.csv(".../Age_sensig_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_df <- read.csv("/.../Age_total_SenNet_subtype_expression_regression_model_output_wFDRall.csv")
+network_df <- read.csv(".../Age_network_subtype_expression_regression_model_output_wFDRall.csv")
+rec_df <- read.csv(".../Age_rec_subtype_expression_regression_model_output_wFDRall.csv")
+trans_df <- read.csv(".../Age_trans_subtype_expression_regression_model_output_wFDRall.csv")
+CSgene_df <- read.csv(".../Age_CSgene_subtype_expression_regression_model_output_wFDRall.csv")
+Senescence_df <- read.csv(".../Age_Senescense_subtype_expression_regression_model_output_wFDRall.csv")
+epithelial_df <- read.csv(".../Age_epithelial_subtype_expression_regression_model_output_wFDRall.csv")
+Fibroblast_df <- read.csv(".../Age_Fibroblast_subtype_expression_regression_model_output_wFDRall.csv")
+Lung_epithelial_df <- read.csv(".../Age_Lung_epithelial_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_BoneMarrow_df <- read.csv(".../Age_SenNet_BoneMarrow_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_CirculatingMarkers_df <- read.csv(".../Age_SenNet_CirculatingMarkers_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_ImmuneSystem_df <- read.csv(".../Age_SenNet_ImmuneSystem_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_Liver_df <- read.csv(".../Age_SenNet_Liver_subtype_expression_regression_model_output_wFDRall.csv")
+SenNet_Lung_df <- read.csv(".../Age_SenNet_Lung_subtype_expression_regression_model_output_wFDRall.csv")
+total_SenNet_df <- read.csv(".../Age_SenNet_Liver_subtype_expression_regression_model_output_wFDRall.csv")
+
+
+sensig_df$Source <- "sensig"
+DeepScence_df$Source <- 'DeepScence'
+geneAge_df$Source <- 'geneAge'
+cellAge_df$Source <- 'cellAge'
+SenMayo_df$Source <- 'SenMayo'
+Quest_df$Source <- "Quest"
+SenNet_df$Source <- 'SenNet'
+network_df$Source <- 'network'
+rec_df$Source <- 'rec'
+trans_df$Source <- 'trans'
+CSgene_df$Source <- 'CSgene'
+Senescence_df$Source <- 'Senescence'
+epithelial_df$Source <- "epithelial"
+Fibroblast_df$Source <- "Fibroblast"
+Lung_epithelial_df$Source <- "Lung_epithelial"
+SenNet_BoneMarrow_df$Source <- "SenNet_BoneMarrow"
+SenNet_CirculatingMarkers_df$Source <- "SenNet_CirculatingMarkers"
+SenNet_ImmuneSystem_df$Source <- "SenNet_ImmuneSystem"
+SenNet_Liver_df$Source <- "SenNet_Liver"
+SenNet_Lung_df$Source <- "SenNet_Lung"
+total_SenNet_df$Source <- "total_SenNet"
+
+
+df_list <- list(Senescence_df, DeepScence_df,CSgene_df, total_SenNet_df, SenNet_CirculatingMarkers_df,SenNet_ImmuneSystem_df,
+                SenNet_Lung_df,SenNet_Adipose_df,SenNet_Skin_df,SenNet_Skeleton_df,
+                SenNet_Placenta_df,SenNet_Ovary_df, SenNet_Kidney_df ,
+                SenNet_CNS_df,SenNet_Cardiovascular_df, 
+                SenNet_BoneMarrow_df, SenNet_Liver_df, geneAge_df, cellAge_df,
+                network_df, trans_df, 
+                SenMayo_df, Lung_epithelial_df, Fibroblast_df, Fibroblast_epithelial_df, Quest_df, 
+                SASP_df, SenNet_df, sensig_df)
+names(df_list) <- c("Senescence","DeepScence", "CSgene", "total_SenNet", "SenNet_CirculatingMarkers", "SenNet_ImmuneSystem", 
+                    "SenNet_Lung", "SenNet_Adipose", "SenNet_Skin", "SenNet_Skeleton", 
+                    "SenNet_Placenta", "SenNet_Ovary", "SenNet_Kidney", 
+                    "SenNet_CNS",  "SenNet_Cardiovascular", 
+                    "SenNet_BoneMarrow", "SenNet_Liver", "geneAge", "cellAge", 
+                    "Freund et al.", "Casella et al.", "SenMayo", "Lung_epithelial", 
+                    "Fibroblast", "Fibroblast_epithelial", "Quest", "De Cecco et al.", 
+                    "SenNet", "sensig")
+# Define the name mapping
+name_mapping <- c(
+  "B" = "B.cells",
+  "CD4 T" = "CD4T",
+  "CD8 T" = "CD8T",
+  "Bloodvessels" = "Endothelial",
+  "Ionocyte" = "Ionocytes",
+  "PNEC" = "Neuroendocrine",
+  "Tuft" = "Tuft.like",
+  "NK" = "NK.cells",
+  "Fibroblasts" = "Fibroblast",
+  "Multiciliated" = "Ciliated",
+  "Basal resting" = "Basal",
+  "Tcells" = "T.cells"
+)
+
+# Loop over each dataframe in the list and perform the transformations
+for (i in seq_along(df_list)) {
+  df <- df_list[[i]]
+  
+  # Rename columns
+  names(df) <- sub("names", "Name", names(df))
+  names(df) <- sub("p_vals", "P_value", names(df))
+  names(df) <- sub("directed_p_value", "Directed_P_Value", names(df))
+  
+  # Apply name mapping
+  df <- df %>%
+    mutate(Name = ifelse(Name %in% names(name_mapping), name_mapping[Name], Name))
+  
+  # Save the updated dataframe back into the list
+  df_list[[i]] <- df
+}
+suffix_pattern <- paste(custom_order, collapse = "|")
+ordered_cols <- c("Name", grep(suffix_pattern, colnames(combined_df), value = TRUE))
+
+combined_df <- combined_df[, ordered_cols]
+
+# Ensure only existing datasets are retained in the order
+custom_order <- intersect(custom_order, colnames(heatmap_matrix))
+
+# Reorder columns in heatmap_matrix
+heatmap_matrix <- heatmap_matrix[, custom_order, drop = FALSE]
+heatmap_data <- combined_df %>%
+  dplyr::select(Name, starts_with("directed_log_pval.")) %>%
+  pivot_longer(
+    cols = -Name,
+    names_to = "Dataset",
+    values_to = "directed_log_pval",
+    names_prefix = "directed_log_pval."
+  )
+
+heatmap_matrix <- heatmap_data %>%
+  spread(key = Dataset, value = directed_log_pval) %>%
+  column_to_rownames(var = "Name") %>%
+  as.matrix()
+
+max_val <- max(abs(heatmap_matrix), na.rm = TRUE)
+color_mapping <- colorRamp2(c(-max_val, 0, max_val), c("blue", "white", "red"))
+color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+heatmap_matrix[is.na(heatmap_matrix)] <- 0
+heatmapAnnotation <- function(j, i, x, y, w, h, fill) {
+    value <- abs(t(as.matrix(heatmap_matrix))[i, j])
+    
+    if (value > 3) {
+        grid::grid.text("****", x, y, rot=90)
+    } else if (value > 2) {
+        grid::grid.text("***", x, y, rot=90)
+    } else if (value > 1.3) {
+        grid::grid.text("**", x, y, rot=90)
+    } else if (value > 1) {
+        grid::grid.text("*", x, y, rot=90)
+    }
+}
+
+significance_annotations <- combined_df %>%
+  dplyr::select(Name, starts_with("P_value.")) %>%
+  pivot_longer(cols = -Name, names_to = "Dataset", values_to = "P_value") %>%
+  mutate(
+    Dataset = sub("P_value.", "", Dataset),
+    Significance = ifelse(P_value < 0.05, "*", "")
+  )
+max_pval <- max(abs(heatmap_data$directed_log_pval), na.rm = TRUE)
+
+color_mapping <- colorRamp2(c(-max_pval, 0, max_pval), c("blue", "white", "red"))
+color_mapping <- colorRamp2(c(-10, 0, 10), c("blue", "white", "red"))
+
+p_heatmap <- ComplexHeatmap::Heatmap(
+  t(as.matrix(heatmap_matrix)), 
+  cluster_rows = FALSE, 
+  cluster_columns = FALSE, 
+  name = "-log10p",
+  col = color_mapping,
+  
+  row_names_gp = grid::gpar(fontsize = 6),  
+  column_names_gp = grid::gpar(fontsize = 6), 
+  
+  heatmap_legend_param = list(
+    title_gp = grid::gpar(fontsize = 6),     
+    labels_gp = grid::gpar(fontsize = 6)   
+  ),
+  
+
+  rect_gp = grid::gpar(col = "white", lwd = 2),
+  
+  
+  cell_fun = heatmapAnnotation
+)
+
+
+
+projDir="..."
+dir.create(projDir)
+    dir.create(file.path(projDir, "plots/"), recursive = T, showWarnings = F)
+
+
+    pdf(file = file.path(projDir, 
+                         "plots/", 
+                         paste("...", "pdf", sep = ".")),
+
+        width = 15/3, # 2 * 10
+        height = 24/2) # 2 * 6
+    
+    print(p_heatmap)
+
+    dev.off()
