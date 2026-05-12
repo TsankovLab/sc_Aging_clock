@@ -40,6 +40,6 @@ You can find the code to create the PBMC object in the [data folder](https://git
 
 ### Spatial (10x Xenium)
 Here is the link to download files required to reproduce the figures:
-[Spatial data](10.5281/zenodo.20144719).
+[Spatial data](https://doi.org/10.5281/zenodo.20144719).
 
 Download and extract the `Spatial` folder in `Data` folder.
