@@ -643,7 +643,139 @@ for (j in 1:length(hlca.celltype)){
     dev.off()
 
 }
+#Figure_2E
+srt=readRDS( file="epithelial obj")
+hlca=srt
+hlca$age_trio <- 'unknown'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=0.0, to=39.5, by=0.5))] <- 'Young'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=40.0, to=59.5, by=0.5))] <- 'Intermediate'
+hlca$age_trio[hlca$Age %in% as.character(seq(from=60.0, to=150.0, by=0.5))] <- 'Old'
+table(hlca$age_trio)
+is.gene.expressed = function(
+  genes=NULL, 
+  mat_counts=NULL, 
+  metadata = NULL, 
+  metaGroupName=NULL, 
+  min_expression=3) 
+  {
+  mat_counts[is.na(mat_counts)] = 0
+  isExp_mat = mat_counts[genes,,drop=F] > min_expression
+  isExp_df = as.data.frame (t(isExp_mat))
+  isExp_df = cbind (isExp_df, metadata[,metaGroupName,drop=F])
+  res = lapply (genes, function(x) 
+    {
+    cellComp (
+    seurat_obj = isExp_df, 
+    metaGroups = c(metaGroupName, x),
+    ptable_factor = 1,
+    #plot_as = 'box',
+    prop = TRUE,
+    #pal = ,
+    #facet_ncol = 15
+    returnDF = TRUE,
+    removeNA = FALSE
+    )
+    })
+  return (do.call (cbind, res))
+  
+  }
 
+
+genes=c("KRT8", "CLDN4")
+
+	mat_counts=srt@assays$RNA@counts
+	metadata=srt@meta.data
+	metaGroupName=c("sample","age_trio","Age")
+  min_expression=3
+  mat_counts[is.na(mat_counts)] = 0
+  isExp_mat = mat_counts[genes,,drop=F] > min_expression
+  isExp_df = as.data.frame (t(as.matrix(isExp_mat)))
+  # isExp_df = as.data.frame (t(isExp_mat))
+  isExp_df = cbind (isExp_df, metadata[,metaGroupName,drop=F])
+  
+dim(isExp_df)
+
+library(dplyr)
+library(ggplot2)
+
+filtered_df <- isExp_df %>%
+  filter(KRT8 == TRUE, CLDN4 == TRUE)
+pos_geneA="KRT8_CLDN4"
+#h=hash()
+#h[["cnmf_CN14_17_Epi_woMC_Alveolar_Subset_cpdb_lvl_2.5_downsampled"]]=list(c("ANXA2", "KRT19", "KRT8", "KRT7", "CTSE", "PRSS23", "IL32", "S100A10", "ACTG1", "KRT18", "HSPB1", "TAGLN2", "CD151", "PKM", "TAGLN", "TACSTD2", "TUBA1A", "LGALS1", "CRIP2", "CAPG", "PLP2", "TPM4", "PFN1", "CD24", "YWHAH"))
+
+head(hlca)
+output_path <-"/sc/arion/projects/Tsankov_Normal_Lung/users/Sepideh/aging_nat_com_revisionWNT7B/new"
+
+#hlca.celltype=unique(hlca$orig.ident)
+
+#number=length(h)
+srt = hlca
+total_cells_df <- isExp_df %>%
+  group_by(age_trio, sample) %>%
+  summarise(total = n())
+ 
+# Calculate the number of cells expressing both KRT8 and KRT17 per group
+count_df <- filtered_df %>%
+  group_by(age_trio, sample) %>%
+  summarise(count = n())
+ 
+# Merge the two dataframes to calculate proportions
+proportion_df <- count_df %>%
+  left_join(total_cells_df, by = c("age_trio", "sample")) %>%
+  mutate(proportion = count / total)
+ 
+# Print the resulting dataframe with proportions
+print(proportion_df)
+ 
+proportion_df$age_trio=factor(proportion_df$age_trio,levels=c("Young","Intermediate","Old"))
+# Print the resulting count data frame
+print(proportion_df)
+ 
+# Calculate Spearman correlation
+ 
+comparisons <- list(c("Young", "Intermediate"), c("Intermediate", "Old"), c("Young", "Old"))
+ 
+
+ 
+comparisons_results <- compare_means(
+  proportion ~ age_trio, 
+  data = proportion_df, 
+  method = "wilcox.test", 
+  p.adjust.method = "fdr", 
+  comparisons = comparisons,
+  symnum.args =list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, Inf), symbols = c("****", "***", "**", "*", "")),
+ 
+)
+
+
+
+ 
+comparisons_results$x_position <- c(1.5, 2, 2.5)  # Centers between "Young" & "Intermediate", "Intermediate" & "Old", "Young" & "Old"
+comparisons_results$y.position <- max(proportion_df$proportion) * 1.05
+# Adjust text size to match font size 6
+library(ggpubr)
+palette=c("#0091CA", "gray", "#D8423D")
+p <- ggviolin(proportion_df, 
+         x = "age_trio", 
+         y = "proportion", 
+         color = "age_trio", 
+         palette = palette,
+         add = "jitter",
+         add.params = list(shape = 16, position = position_jitter(0.2))
+         ) +
+      labs(title = "Distribution of Double-Positive Cells by Age Group",
+       x = "Age Group",
+       y = paste0("proportion of ",pos_geneA,"+ Cells")) +
+  # theme_minimal() +
+  theme(legend.position = "none") +
+  geom_text(data = comparisons_results, 
+                   aes(x = x_position, label = p.signif, y=y.position), 
+                   vjust = -0.5, 
+                   inherit.aes = FALSE, 
+                   size = 10 * 0.35)+
+
+  ggsave(paste0(out_dir, "/Figures_scatterplot&_HLCA_age_vs_", pos_geneA, "+_", "_age_trio_proporition_min_expression", min_expression, "_wFDR.pdf"), plot = p, width = 1.5 * 2.5, height = 1.5 * 2.5, dpi = 500)
 #Figure_2F
 
 df1 <- get(load(file = "data path/lig_rec_differential_HLCA_old_young_1k.Rda"))
